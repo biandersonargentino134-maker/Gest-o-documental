@@ -44,5 +44,34 @@
         </form>
      </div>
      </div>
+
+     <!-- App (esqueleto, ainda sem dados de verdade) -->
+      <div id="main-app" hidden>
+        <aside class="sidebar">
+            <div class="brand"><span class="brand-mark">🔐</span> Guardar Arquivos</div>
+            <nav>
+                <a href="#" class="nav-item active" data-view="Inicio">🏠​ Início</a>
+                <a href="#" class="nav-item" data-view="documentos">📁​ Documentos</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-email" id="user-email"></div>
+                <button class="btn btn-ghost btn-sm" id="logout-btn">Sair</button>
+            </div>
+        </aside>
+
+        <main class="content">
+            <section class="view active" id="view-inicio">
+                <h2>Inicio</h2>
+                <p>Aqui vai entrar o resumo dos documentos (ainda não conectado a nenhum banco de dados).</p>
+            </section>
+
+            <section class="view" id="view-documentos">
+                <h2>Documentos</h2>
+                <p>Aqui vai entrar a lista de documentos e o formulario de upload.</p>
+            </section>
+        </main>
+      </div>
+
+      <script src="script.js"></script>
 </body>
 </html>
