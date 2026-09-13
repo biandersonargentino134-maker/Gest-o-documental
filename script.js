@@ -3,6 +3,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import{
     getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+    getFirestore, collection, onSnapshot, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Configuração do Firebase
 const firebaseConfig = {
@@ -16,8 +19,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app); // <- novo: conexão com o banco de dados
 
-// Etapa 1 - navegação visual entre "Inicio" e "Documentos" (por enquanto)
+// - navegação entre as Abas
 
 document.querySelectorAll(".nav-item").forEach(item => {
     item.addEventListener("click", (e) => {
@@ -50,6 +54,18 @@ loginForm.addEventListener("submit", async (e) => {
 });
  
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+//-- Lista de documentos (só leitura)
+function listenDocumentos(){
+    const q = query(collection(db, "documentos"), orderBy("nomeArquivo"));
+    onSnapshot(q, (snap) => {
+        const list = document.getElementById("doc-list");
+        if (snap.empty) {
+            list.innerHTML = "<li> Nenhum documento ainda.</li>";
+            return;
+        }
+        list.innerHTML = snap.docs.map(d => `<li>${d.data().nomeArquivo}</li>`).join("");
+    });
+}
 
 //Roda automaticamente sempre que o estado de login muda (entrou, saiu,
 //ou ja estava logado de antes e a pagina foi recarregada)
@@ -58,6 +74,7 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById("login-screen").hidden = true;
         document.getElementById("main-app").hidden = false;
         document.getElementById("user-email").textContent = user.email;
+        listenDocumentos(); // <- novo: começa a escutar o banco assim que loga
     } else {
         document.getElementById("login-screen").hidden = false;
         document.getElementById("main-app").hidden = true;
