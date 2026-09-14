@@ -27,6 +27,15 @@ const storage = getStorage(app); // conexão com o armazenamento de arquivo
 
     const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+// - Transforma um numero de bytes num texto legível (ex: "2.3 MB")
+
+function formatBytes(bytes) {
+    if (!bytes) return "0 MB";
+    const mb = bytes / (1024 ** 2);
+    if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
+    return mb.toFixed(1) + " MB";
+}
+
 // - navegação entre as Abas
 document.querySelectorAll(".nav-item").forEach(item => {
     item.addEventListener("click", (e) => {
@@ -103,20 +112,26 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
     e.target.reset();
 });
 
-//-- Lista de documentos
+//-- Lista de documentos + medidor de espaço
+// Toda vez que a lista de documentos muda, além de redesenhar a
+// lista a gente também SOMA o tamanho de todos os arquivos e atualiza
+// o cartão "de espaço usado" no Inicio.
 function listenDocumentos(){
     const q = query(collection(db, "documentos"), orderBy("nomeArquivo"));
     onSnapshot(q, (snap) => {
         const list = document.getElementById("doc-list");
         if (snap.empty) {
             list.innerHTML = "<li> Nenhum documento ainda.</li>";
-            return;
-        }
-        list.innerHTML = snap.docs.map(d => {
+        } else {list.innerHTML = snap.docs.map(d => {
             const doc = d.data();
         return `<li>${doc.nomeArquivo} — ${doc.empresa} · ${doc.tipoImposto} · ${doc.mes}/${doc.ano}</li>`;
     }).join("");
-    });
+    }
+
+// Soma o tamanho de todos os documentos para o medidor de espaço 
+    const totalBytes = snap.docs.reduce((soma, d) => soma + (d.data().tamanho || 0), 0);
+    document.getElementById("stat-space-used").textContent = formatBytes(totalBytes);
+});
 }
 
 //Roda automaticamente sempre que o estado de login muda (entrou, saiu,

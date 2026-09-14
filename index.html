@@ -62,7 +62,10 @@
         <main class="content">
             <section class="view active" id="view-inicio">
                 <h2>Inicio</h2>
-                <p>Aqui vai entrar o resumo dos documentos (ainda não conectado a nenhum banco de dados).</p>
+                <div class="stat-card">
+                    <div class="stat-num" id="stat-space-used">0 MB</div>
+                    <div class="stat-lbl">de espaço usado</div>
+                </div>
             </section>
 
             <section class="view" id="view-documentos">
@@ -82,6 +85,11 @@
                         <input type="text" id="upload-tipo" required>
                     </div>
                     <div class="field-row">
+                        <div class="field">
+                            <label for="upload-mes">Mês</label>
+                            <select id="upload-mes" required></select>
+                        </div>
+                    </div>
                         <div class="field">
                             <label for="upload-ano">Ano</label>
                             <input type="number" id="upload-ano" required>
