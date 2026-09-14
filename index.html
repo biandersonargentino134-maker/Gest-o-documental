@@ -67,8 +67,30 @@
 
             <section class="view" id="view-documentos">
                 <h2>Documentos</h2>
-                <ul class="doc-list" id="doc-list">
-                    <!-- Lista de documentos será preenchida dinamicamente -->
+                
+                <form id="upload-form">
+                    <div class="field">
+                        <label for="upload-files">Arquivos</label>
+                        <input type="file" id="upload-file" required>
+                    </div>
+                    <div class="field">
+                        <label for="upload-empresa">Empresa</label>
+                        <input type="text" id="upload-empresa" required>
+                    </div>
+                    <div class="field">
+                        <label for="upload-tipo">Tipo de imposto</label>
+                        <input type="text" id="upload-tipo" required>
+                    </div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="upload-ano">Ano</label>
+                            <input type="number" id="upload-ano" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn">Enviar documento</button>
+                </form>
+
+                <ul id="doc-list" class="doc-list"></ul>
             </section>
         </main>
       </div>

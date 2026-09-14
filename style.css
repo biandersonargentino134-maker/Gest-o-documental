@@ -4,7 +4,7 @@
     --surface:#232830;
     --surface-2:#2b3139;
     --border:#3a414d;
-    --brass:#c9a277;
+    --brass:#c9a227;
     --brass-light:#e3c25f;
     --text:#edeef0;
     --text-muted:#9aa3af;
@@ -123,3 +123,6 @@ main.content{flex:1;padding:34px 40px;}
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);
     padding:12px 16px; margin-bottom:8px; font-size: 14px;
 }
+
+/* Formulario de upload */
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
