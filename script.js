@@ -1,3 +1,9 @@
+// Removendo o Firebase Storage
+// Na hora de ativar o Firebase Storage, o Google passou a pedir cartão de crédito
+//cadastrado  (mudança de politica deles), mesmo pra uso dentro da cota gratuita.
+// Como eu não queria depender de cartão, tirei o Storage daqui - o Upload Através do Google Drive 
+// (não exige cartão e tem um armazenamento maior gratuito).
+
 // Conectando o login ao firebase de verdade
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import{
@@ -6,9 +12,6 @@ import{
 import {
     getFirestore, collection, onSnapshot, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {
-    getStorage, ref, uploadBytes, getDownloadURL
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 // Configuração do Firebase
 const firebaseConfig = {
@@ -23,7 +26,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app); // <- conexão com o banco de dados
-const storage = getStorage(app); // conexão com o armazenamento de arquivo
 
     const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -79,7 +81,9 @@ function populateMonthSelect() {
         select.appendChild(opt);
     });
 }
-
+// LEMBRETE: nesse commit especifico, o upload salva os DADOS do documento no Firestone,
+// mas o ARQUIVO em si ainda nao vai pra lugar nenhum (retirei o Storage, então nao onde guardar ele ainda)
+// Isso é só um estado de transição - por enquanto
 // Envio de documentos (Upload)
 document.getElementById("upload-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -95,17 +99,12 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
         return;
     }
 
-    // Subindo o arquivo para o Firebase Storage
-    const storageRef = ref(storage, `documentos/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-
     // Salvando os dados (metadados) do documento no Firestone
     await addDoc(collection(db, "documentos"), {
         nomeArquivo: file.name,
         empresa, tipoImposto, mes, ano: Number(ano),
         tamanho: file.size,
-        url,
+        url:"", // sem link por enquanto
         uploadedAt: serverTimestamp(),
     });
 
@@ -122,7 +121,8 @@ function listenDocumentos(){
         const list = document.getElementById("doc-list");
         if (snap.empty) {
             list.innerHTML = "<li> Nenhum documento ainda.</li>";
-        } else {list.innerHTML = snap.docs.map(d => {
+        } else {
+            list.innerHTML = snap.docs.map(d => {
             const doc = d.data();
         return `<li>${doc.nomeArquivo} — ${doc.empresa} · ${doc.tipoImposto} · ${doc.mes}/${doc.ano}</li>`;
     }).join("");
