@@ -134,3 +134,11 @@ main.content{flex:1;padding:34px 40px;}
 }
 .stat-num{font-size:26px;font-weight: 700;font-family: 'Fraunces',serif;color:var(--brass-light);}
 .stat-lbl{font-size: 12.5px;color: var(--text-muted);margin-top: 4px;}
+
+/* Lista de documentos com botão de excluir */
+.doc-list li{display:flex; justify-content: space-between; align-items: center;gap: 10px;}
+.doc-list .btn-excluir{
+    background: none;border: 1px solid #c85c4b;color: #c85c4b;border-radius:6px;
+    padding:5px 10px;font-size:12px;cursor: pointer;flex-shrink:0;
+}
+.doc-list .btn-excluir:hover{background: rgba(200,92,75,0.12);}
