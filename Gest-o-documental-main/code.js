@@ -3,7 +3,7 @@
 // Script (script.google.com), como um "servidor" gratuito ligado à sua
 // conta do Google Drive. O site (script.js) chama esse backend por HTTP
 // pra pedir "salva esse arquivo" ou "apaga esse arquivo".
-// Esse commit só cria o backend — 
+// Esse commit só cria o backend — a integração com o site vem no próximo.
 
 function doPost(e) {
   try {

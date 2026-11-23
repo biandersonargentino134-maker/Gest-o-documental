@@ -24,17 +24,27 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+const QUOTA_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
+// "Memória" da página: cópia dos documentos que vêm do Firestore
+let documentos = [];
+
+// ---------- Funções utilitárias ----------
 function formatBytes(bytes) {
   if (!bytes) return "0 MB";
-  const mb = bytes / (1024 ** 2);
-  if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
-  return mb.toFixed(1) + " MB";
+  const gb = bytes / (1024 ** 3);
+  if (gb >= 1) return gb.toFixed(2) + " GB";
+  return (bytes / (1024 ** 2)).toFixed(1) + " MB";
 }
 
-// Converte o arquivo escolhido em texto (base64) — é assim que ele
-// consegue viajar dentro de um JSON até o Apps Script.
+// Evita que nomes com símbolos (< > etc.) bagunçem o HTML da página
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str ?? "";
+  return div.innerHTML;
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -44,16 +54,20 @@ function fileToBase64(file) {
   });
 }
 
-// ---------- Navegação entre as abas ----------
+// ---------- Navegação entre as páginas ----------
+// É um site de página única: as "páginas" são seções que ficam
+// escondidas, e essa função mostra só a que foi pedida.
+function goToView(target) {
+  document.querySelectorAll(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === target));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + target).classList.add("active");
+}
 document.querySelectorAll(".nav-item").forEach(item => {
-  item.addEventListener("click", (e) => {
-    e.preventDefault();
-    document.querySelectorAll(".nav-item").forEach(i => i.classList.remove("active"));
-    item.classList.add("active");
-    const target = item.dataset.view;
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    document.getElementById("view-" + target).classList.add("active");
-  });
+  item.addEventListener("click", (e) => { e.preventDefault(); goToView(item.dataset.view); });
+});
+// Botões e links "de atalho" (ex: "Enviar documento" no Início)
+document.querySelectorAll("[data-goto]").forEach(el => {
+  el.addEventListener("click", (e) => { e.preventDefault(); goToView(el.dataset.goto); });
 });
 
 // ---------- Login ----------
@@ -76,6 +90,7 @@ document.getElementById("logout-btn").addEventListener("click", () => signOut(au
 
 function populateMonthSelect() {
   const select = document.getElementById("upload-mes");
+  select.innerHTML = "";
   MESES.forEach(m => {
     const opt = document.createElement("option");
     opt.value = m; opt.textContent = m;
@@ -83,7 +98,7 @@ function populateMonthSelect() {
   });
 }
 
-// ---------- Upload: agora manda o arquivo de verdade pro Apps Script ----------
+// ---------- Upload ----------
 document.getElementById("upload-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const submitBtn = e.target.querySelector("button[type=submit]");
@@ -98,11 +113,16 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
     return;
   }
 
+  const totalUsado = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
+  if (totalUsado + file.size > QUOTA_BYTES) {
+    alert("Espaço insuficiente. O limite é de 10 GB.");
+    return;
+  }
+
   submitBtn.disabled = true;
   submitBtn.textContent = "Enviando...";
   try {
     const fileData = await fileToBase64(file);
-
     const response = await fetch(GAS_URL, {
       method: "POST",
       body: JSON.stringify({
@@ -116,12 +136,15 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
     const result = await response.json();
     if (result.error) throw new Error(result.error);
 
+    const agora = new Date();
     await addDoc(collection(db, "documentos"), {
       nomeArquivo: file.name,
       empresa, tipoImposto, mes, ano: Number(ano),
       tamanho: file.size,
       url: result.url,
-      fileId: result.fileId, // <- guardamos o id do Drive, precisamos dele pra excluir depois
+      fileId: result.fileId,
+      uploadedAtLabel: agora.toLocaleDateString("pt-BR"), // texto da data, pra mostrar na tabela
+      uploadedAtMs: agora.getTime(),                       // número, pra ordenar do mais novo pro mais velho
       uploadedAt: serverTimestamp(),
     });
 
@@ -134,47 +157,119 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
   }
 });
 
-// ---------- Exclusão: apaga do Drive (via Apps Script) e do Firestore ----------
+// ---------- Exclusão ----------
 async function excluirDocumento(docId, fileId, nome) {
   if (!confirm(`Excluir "${nome}"? Essa ação não pode ser desfeita.`)) return;
   try {
-    await fetch(GAS_URL, {
-      method: "POST",
-      body: JSON.stringify({ action: "delete", fileId })
-    });
+    if (fileId) {
+      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId }) });
+    }
     await deleteDoc(doc(db, "documentos", docId));
   } catch (err) {
     alert("Erro ao excluir: " + err.message);
   }
 }
 
-// ---------- Lista de documentos ----------
+// ---------- Desenho das tabelas ----------
+
+// Monta o HTML de UMA linha de tabela. Serve para as duas tabelas
+// (Início e Documentos) — "completa" mostra período e tamanho a mais.
+function docRow(d, { completa = false } = {}) {
+  return `
+    <tr>
+      <td>
+        <div class="doc-name-cell">
+          <span class="doc-file-icon">📄</span>
+          <div>
+            <div class="doc-name-main">${escapeHtml(d.nomeArquivo)}</div>
+            <div class="doc-name-sub">${escapeHtml(d.mes)}/${d.ano}</div>
+          </div>
+        </div>
+      </td>
+      <td>${escapeHtml(d.empresa)}</td>
+      <td><span class="pill">${escapeHtml(d.tipoImposto)}</span></td>
+      ${completa
+        ? `<td>${escapeHtml(d.mes)}/${d.ano}</td><td>${formatBytes(d.tamanho)}</td>`
+        : `<td>${escapeHtml(d.uploadedAtLabel || "")}</td>`}
+      <td>
+        <div class="doc-actions-cell">
+          ${d.url ? `<a class="action-link" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">Abrir</a>` : ""}
+          <button class="btn-text-danger" data-id="${d.id}" data-fileid="${escapeHtml(d.fileId || "")}" data-nome="${escapeHtml(d.nomeArquivo)}">Excluir</button>
+        </div>
+      </td>
+    </tr>`;
+}
+
+// Liga o clique dos botões "Excluir" depois que uma tabela é desenhada
+function bindDeleteButtons(container) {
+  container.querySelectorAll(".btn-text-danger").forEach(btn => {
+    btn.addEventListener("click", () => {
+      excluirDocumento(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
+    });
+  });
+}
+
+function renderTabelas() {
+  // Tabela de documentos recentes (Início): só os 6 mais novos
+  const recentBody = document.getElementById("recent-table-body");
+  const recentes = documentos.slice(0, 6);
+  recentBody.innerHTML = recentes.length
+    ? recentes.map(d => docRow(d)).join("")
+    : '<tr class="empty-row"><td colspan="5">Nenhum documento enviado ainda.</td></tr>';
+  bindDeleteButtons(recentBody);
+
+  // Tabela completa (página Documentos)
+  const docBody = document.getElementById("doc-table-body");
+  docBody.innerHTML = documentos.length
+    ? documentos.map(d => docRow(d, { completa: true })).join("")
+    : '<tr class="empty-row"><td colspan="6">Nenhum documento enviado ainda.</td></tr>';
+  bindDeleteButtons(docBody);
+}
+
+// Página Empresas: ainda não existe um cadastro de empresas, então a lista
+// é montada a partir dos documentos (cada empresa que já tem documento).
+function renderEmpresas() {
+  const grid = document.getElementById("empresas-grid");
+  const porEmpresa = {};
+  documentos.forEach(d => {
+    if (!porEmpresa[d.empresa]) porEmpresa[d.empresa] = { qtd: 0, bytes: 0 };
+    porEmpresa[d.empresa].qtd += 1;
+    porEmpresa[d.empresa].bytes += d.tamanho || 0;
+  });
+  const nomes = Object.keys(porEmpresa).sort();
+
+  document.getElementById("stat-total-empresas").textContent = nomes.length;
+
+  if (nomes.length === 0) {
+    grid.innerHTML = '<div class="empty-row" style="grid-column:1/-1;padding:34px;">Nenhuma empresa ainda — elas aparecem aqui depois do primeiro documento enviado.</div>';
+    return;
+  }
+  grid.innerHTML = nomes.map(nome => `
+    <div class="empresa-card">
+      <div class="stat-icon">🏢</div>
+      <div class="empresa-name">${escapeHtml(nome)}</div>
+      <div class="empresa-meta"><b>${porEmpresa[nome].qtd}</b> documento(s) · <b>${formatBytes(porEmpresa[nome].bytes)}</b></div>
+    </div>`).join("");
+}
+
+// Cartões de estatística do Início
+function renderEstatisticas() {
+  const totalBytes = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
+  const pct = Math.min(100, (totalBytes / QUOTA_BYTES) * 100);
+  document.getElementById("stat-total-docs").textContent = documentos.length;
+  document.getElementById("stat-space-used").textContent = formatBytes(totalBytes);
+  document.getElementById("mini-progress-bar").style.width = pct + "%";
+}
+
+// Escuta os documentos em tempo real e redesenha tudo quando algo muda
 function listenDocumentos() {
-  const q = query(collection(db, "documentos"), orderBy("nomeArquivo"));
-  onSnapshot(q, (snap) => {
-    const list = document.getElementById("doc-list");
-    if (snap.empty) {
-      list.innerHTML = "<li>Nenhum documento ainda.</li>";
-    } else {
-      list.innerHTML = snap.docs.map(d => {
-        const doc = d.data();
-        return `
-          <li>
-            <span>${doc.nomeArquivo} — ${doc.empresa} · ${doc.tipoImposto} · ${doc.mes}/${doc.ano}</span>
-            <button class="btn-excluir" data-id="${d.id}" data-fileid="${doc.fileId}" data-nome="${doc.nomeArquivo}">Excluir</button>
-          </li>`;
-      }).join("");
-
-      // Liga o clique de cada botão "Excluir" recém-criado
-      list.querySelectorAll(".btn-excluir").forEach(btn => {
-        btn.addEventListener("click", () => {
-          excluirDocumento(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
-        });
-      });
-    }
-
-    const totalBytes = snap.docs.reduce((soma, d) => soma + (d.data().tamanho || 0), 0);
-    document.getElementById("stat-space-used").textContent = formatBytes(totalBytes);
+  onSnapshot(query(collection(db, "documentos")), (snap) => {
+    documentos = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.uploadedAtMs || 0) - (a.uploadedAtMs || 0)); // mais novos primeiro
+    renderEstatisticas();
+    renderTabelas();
+    renderEmpresas();
   });
 }
 
@@ -183,6 +278,12 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById("login-screen").hidden = true;
     document.getElementById("main-app").hidden = false;
     document.getElementById("user-email").textContent = user.email;
+
+    // Saudação: "Olá, Nome 👋" usando a parte do e-mail antes do @
+    const nome = user.email.split("@")[0];
+    document.getElementById("greeting-title").textContent =
+      `Olá, ${nome.charAt(0).toUpperCase() + nome.slice(1)} 👋`;
+
     populateMonthSelect();
     listenDocumentos();
   } else {

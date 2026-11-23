@@ -44,6 +44,7 @@
     </div>
     <nav>
       <a href="#" class="nav-item active" data-view="inicio"><span class="icon">🏠</span> Início</a>
+      <a href="#" class="nav-item" data-view="empresas"><span class="icon">🏢</span> Empresas</a>
       <a href="#" class="nav-item" data-view="documentos"><span class="icon">🗂️</span> Documentos</a>
     </nav>
     <div class="sidebar-spacer"></div>
@@ -52,19 +53,79 @@
   </aside>
 
   <main class="content">
+
+    <!-- ---- INÍCIO ---- -->
     <section class="view active" id="view-inicio">
       <div class="page-header">
         <div>
-          <h1>Início</h1>
-          <p>Resumo dos seus documentos.</p>
+          <h1 id="greeting-title">Olá 👋</h1>
+          <p>Aqui está um resumo dos seus documentos.</p>
+        </div>
+        <button class="btn-primary" data-goto="documentos">⬆ Enviar documento</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🏢</div>
+          <div class="stat-num" id="stat-total-empresas">0</div>
+          <div class="stat-lbl">Empresas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📄</div>
+          <div class="stat-num" id="stat-total-docs">0</div>
+          <div class="stat-lbl">Documentos</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">💾</div>
+          <div class="stat-num" id="stat-space-used">0 MB</div>
+          <div class="stat-lbl">de 10 GB usados</div>
+          <div class="mini-progress"><div class="mini-progress-bar" id="mini-progress-bar"></div></div>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-num" id="stat-space-used">0 MB</div>
-        <div class="stat-lbl">de espaço usado</div>
+
+      <h3 class="section-title">Ações rápidas</h3>
+      <div class="quick-actions">
+        <button class="quick-card" data-goto="empresas">
+          <span class="quick-icon">🏢</span>
+          <div><div class="quick-title">Empresas</div><div class="quick-sub">Ver todas as empresas</div></div>
+          <span class="quick-arrow">→</span>
+        </button>
+        <button class="quick-card" data-goto="documentos">
+          <span class="quick-icon">⬆</span>
+          <div><div class="quick-title">Enviar documento</div><div class="quick-sub">Adicionar novo arquivo</div></div>
+          <span class="quick-arrow">→</span>
+        </button>
+        <button class="quick-card" data-goto="documentos">
+          <span class="quick-icon">📄</span>
+          <div><div class="quick-title">Ver documentos</div><div class="quick-sub">Lista completa</div></div>
+          <span class="quick-arrow">→</span>
+        </button>
+      </div>
+
+      <div class="section-header-row">
+        <h3 class="section-title">Documentos recentes</h3>
+        <a href="#" data-goto="documentos" class="link-see-all">Ver todos →</a>
+      </div>
+      <div class="table-card">
+        <table class="doc-table">
+          <thead><tr><th>Documento</th><th>Empresa</th><th>Categoria</th><th>Data</th><th>Ação</th></tr></thead>
+          <tbody id="recent-table-body"></tbody>
+        </table>
       </div>
     </section>
 
+    <!-- ---- EMPRESAS ---- -->
+    <section class="view" id="view-empresas">
+      <div class="page-header">
+        <div>
+          <h1>Empresas</h1>
+          <p>Empresas que já têm documentos guardados.</p>
+        </div>
+      </div>
+      <div class="empresas-grid" id="empresas-grid"></div>
+    </section>
+
+    <!-- ---- DOCUMENTOS ---- -->
     <section class="view" id="view-documentos">
       <div class="page-header">
         <div>
@@ -99,8 +160,14 @@
         <button type="submit" class="btn-primary">Enviar documento</button>
       </form>
 
-      <ul id="doc-list" class="doc-list"></ul>
+      <div class="table-card">
+        <table class="doc-table">
+          <thead><tr><th>Documento</th><th>Empresa</th><th>Categoria</th><th>Período</th><th>Tamanho</th><th>Ação</th></tr></thead>
+          <tbody id="doc-table-body"></tbody>
+        </table>
+      </div>
     </section>
+
   </main>
 </div>
 
