@@ -101,8 +101,7 @@ function populateMonthSelect(selectId) {
 }
 
 // ---------- Envio de documento (lógica compartilhada) ----------
-// Toda a parte "pesada" do envio fica aqui, numa função só, pra poder ser
-// usada por mais de um formulário sem repetir código.
+// Toda a parte "pesada" do envio fica aqui, separada da tela.
 async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtras = [] }, onProgress = () => {}) {
   if (file.size > MAX_FILE_BYTES) {
     throw new Error("Arquivo maior que 20 MB. Escolha um arquivo menor.");
@@ -143,36 +142,7 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtra
   });
 }
 
-// ---------- Formulário antigo (na página Documentos) ----------
-// Continua funcionando por enquanto — sai no próximo commit.
-document.getElementById("upload-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const submitBtn = e.target.querySelector("button[type=submit]");
-  const file = document.getElementById("upload-file").files[0];
-  const empresa = document.getElementById("upload-empresa").value.trim();
-  const tipoImposto = document.getElementById("upload-tipo").value.trim();
-  const mes = document.getElementById("upload-mes").value;
-  const ano = document.getElementById("upload-ano").value;
-
-  if (!file || !empresa || !tipoImposto || !mes || !ano) {
-    alert("Preencha todos os campos antes de enviar.");
-    return;
-  }
-
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Enviando...";
-  try {
-    await enviarDocumento({ file, empresa, tipoImposto, mes, ano });
-    e.target.reset();
-  } catch (err) {
-    alert("Erro ao enviar: " + err.message);
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Enviar documento";
-  }
-});
-
-// ---------- Página de Upload (nova) ----------
+// ---------- Página de Upload ----------
 let selectedFile = null; // arquivo escolhido, esperando o clique em "Salvar"
 let extraTags = [];      // tags extras digitadas pelo usuário (ex: "urgente")
 
@@ -442,7 +412,6 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById("greeting-title").textContent =
       `Olá, ${nome.charAt(0).toUpperCase() + nome.slice(1)} 👋`;
 
-    populateMonthSelect("upload-mes");
     populateMonthSelect("up-mes");
     iniciarPaginaUpload();
     listenDocumentos();
