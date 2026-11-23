@@ -4,7 +4,7 @@ import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, doc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp
+  getFirestore, collection, addDoc, doc, deleteDoc, onSnapshot, query, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -25,6 +25,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 const QUOTA_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
+const MAX_FILE_BYTES = 20 * 1024 * 1024;     // 20 MB por arquivo (limite prático do Apps Script)
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
 // "Memória" da página: cópia dos documentos que vêm do Firestore
@@ -88,8 +89,9 @@ loginForm.addEventListener("submit", async (e) => {
 
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
 
-function populateMonthSelect() {
-  const select = document.getElementById("upload-mes");
+// Preenche um <select> com os 12 meses (recebe o id do select)
+function populateMonthSelect(selectId) {
+  const select = document.getElementById(selectId);
   select.innerHTML = "";
   MESES.forEach(m => {
     const opt = document.createElement("option");
@@ -98,7 +100,51 @@ function populateMonthSelect() {
   });
 }
 
-// ---------- Upload ----------
+// ---------- Envio de documento (lógica compartilhada) ----------
+// Toda a parte "pesada" do envio fica aqui, numa função só, pra poder ser
+// usada por mais de um formulário sem repetir código.
+async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtras = [] }, onProgress = () => {}) {
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error("Arquivo maior que 20 MB. Escolha um arquivo menor.");
+  }
+  const totalUsado = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
+  if (totalUsado + file.size > QUOTA_BYTES) {
+    throw new Error("Espaço insuficiente. O limite é de 10 GB.");
+  }
+
+  onProgress(40);
+  const fileData = await fileToBase64(file);
+  onProgress(70);
+  const response = await fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "upload",
+      empresa,
+      fileName: file.name,
+      mimeType: file.type || "application/octet-stream",
+      fileData
+    })
+  });
+  const result = await response.json();
+  if (result.error) throw new Error(result.error);
+  onProgress(100);
+
+  const agora = new Date();
+  await addDoc(collection(db, "documentos"), {
+    nomeArquivo: file.name,
+    empresa, tipoImposto, mes, ano: Number(ano),
+    tagsExtras,
+    tamanho: file.size,
+    url: result.url,
+    fileId: result.fileId,
+    uploadedAtLabel: agora.toLocaleDateString("pt-BR"),
+    uploadedAtMs: agora.getTime(),
+    uploadedAt: serverTimestamp(),
+  });
+}
+
+// ---------- Formulário antigo (na página Documentos) ----------
+// Continua funcionando por enquanto — sai no próximo commit.
 document.getElementById("upload-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const submitBtn = e.target.querySelector("button[type=submit]");
@@ -113,47 +159,151 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
     return;
   }
 
-  const totalUsado = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
-  if (totalUsado + file.size > QUOTA_BYTES) {
-    alert("Espaço insuficiente. O limite é de 10 GB.");
-    return;
-  }
-
   submitBtn.disabled = true;
   submitBtn.textContent = "Enviando...";
   try {
-    const fileData = await fileToBase64(file);
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        action: "upload",
-        empresa,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        fileData
-      })
-    });
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
-
-    const agora = new Date();
-    await addDoc(collection(db, "documentos"), {
-      nomeArquivo: file.name,
-      empresa, tipoImposto, mes, ano: Number(ano),
-      tamanho: file.size,
-      url: result.url,
-      fileId: result.fileId,
-      uploadedAtLabel: agora.toLocaleDateString("pt-BR"), // texto da data, pra mostrar na tabela
-      uploadedAtMs: agora.getTime(),                       // número, pra ordenar do mais novo pro mais velho
-      uploadedAt: serverTimestamp(),
-    });
-
+    await enviarDocumento({ file, empresa, tipoImposto, mes, ano });
     e.target.reset();
   } catch (err) {
     alert("Erro ao enviar: " + err.message);
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Enviar documento";
+  }
+});
+
+// ---------- Página de Upload (nova) ----------
+let selectedFile = null; // arquivo escolhido, esperando o clique em "Salvar"
+let extraTags = [];      // tags extras digitadas pelo usuário (ex: "urgente")
+
+const dropzone = document.getElementById("dropzone");
+const upFileInput = document.getElementById("up-file");
+const upSubmit = document.getElementById("up-submit");
+
+// Clicar na área (ou no botão) abre o seletor de arquivos
+document.getElementById("select-file-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  upFileInput.click();
+});
+dropzone.addEventListener("click", () => upFileInput.click());
+upFileInput.addEventListener("change", () => {
+  if (upFileInput.files[0]) setSelectedFile(upFileInput.files[0]);
+});
+
+// Arrastar e soltar: destaca a área enquanto o arquivo está por cima
+["dragenter", "dragover"].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("drag-over"); });
+});
+["dragleave", "drop"].forEach(evt => {
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("drag-over"); });
+});
+dropzone.addEventListener("drop", (e) => {
+  const file = e.dataTransfer.files[0];
+  if (file) setSelectedFile(file);
+});
+
+// Guarda o arquivo escolhido, mostra o nome na área e libera o botão
+function setSelectedFile(file) {
+  selectedFile = file;
+  document.getElementById("dropzone-title").textContent = "Arquivo selecionado:";
+  let nome = dropzone.querySelector(".dropzone-filename");
+  if (!nome) {
+    nome = document.createElement("div");
+    nome.className = "dropzone-filename";
+    dropzone.appendChild(nome);
+  }
+  nome.textContent = file.name;
+  updateSaveState();
+}
+
+// O botão "Salvar documento" só fica liberado depois de escolher um arquivo
+function updateSaveState() {
+  upSubmit.disabled = !selectedFile;
+  document.getElementById("up-hint").textContent =
+    selectedFile ? "" : "Selecione um arquivo para habilitar o salvamento.";
+}
+
+// Desenha as tags: as 3 automáticas (categoria, mês, ano) + as extras
+function renderUploadTags() {
+  const wrap = document.getElementById("up-tags-row");
+  const baseTags = [
+    document.getElementById("up-tipo").value.trim(),
+    document.getElementById("up-mes").value,
+    document.getElementById("up-ano").value
+  ].filter(Boolean);
+
+  let html = baseTags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join("");
+  html += extraTags.map((t, i) =>
+    `<span class="tag-chip">${escapeHtml(t)}<button type="button" data-remove-tag="${i}">✕</button></span>`).join("");
+  html += `<button type="button" class="tag-chip-add" id="add-extra-tag-btn">+ adicionar</button>`;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll("[data-remove-tag]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      extraTags.splice(Number(btn.dataset.removeTag), 1);
+      renderUploadTags();
+    });
+  });
+  document.getElementById("add-extra-tag-btn").addEventListener("click", () => {
+    const val = window.prompt("Nova tag:");
+    if (val && val.trim()) { extraTags.push(val.trim()); renderUploadTags(); }
+  });
+}
+["up-tipo", "up-mes", "up-ano"].forEach(id => {
+  document.getElementById(id).addEventListener("input", renderUploadTags);
+  document.getElementById(id).addEventListener("change", renderUploadTags);
+});
+
+// Limpa o arquivo e as tags extras depois de um envio
+function resetUploadPage() {
+  selectedFile = null;
+  extraTags = [];
+  upFileInput.value = "";
+  document.getElementById("dropzone-title").textContent = "Arraste seu arquivo aqui";
+  const nome = dropzone.querySelector(".dropzone-filename");
+  if (nome) nome.remove();
+  document.getElementById("up-progress-wrap").style.display = "none";
+  document.getElementById("up-progress-bar").style.width = "0%";
+  renderUploadTags();
+  updateSaveState();
+}
+
+// Valores iniciais: ano atual e mês atual já preenchidos
+function iniciarPaginaUpload() {
+  const hoje = new Date();
+  document.getElementById("up-ano").value = hoje.getFullYear();
+  document.getElementById("up-mes").value = MESES[hoje.getMonth()];
+  renderUploadTags();
+  updateSaveState();
+}
+
+// Clique em "Salvar documento"
+upSubmit.addEventListener("click", async () => {
+  const empresa = document.getElementById("up-empresa").value.trim();
+  const tipoImposto = document.getElementById("up-tipo").value.trim();
+  const mes = document.getElementById("up-mes").value;
+  const ano = document.getElementById("up-ano").value;
+
+  // As 4 tags são obrigatórias
+  if (!selectedFile || !empresa || !tipoImposto || !mes || !ano) {
+    alert("Preencha empresa, ano, mês e categoria antes de salvar.");
+    return;
+  }
+
+  upSubmit.disabled = true;
+  upSubmit.textContent = "Enviando...";
+  document.getElementById("up-progress-wrap").style.display = "block";
+  try {
+    await enviarDocumento(
+      { file: selectedFile, empresa, tipoImposto, mes, ano, tagsExtras: extraTags },
+      (pct) => { document.getElementById("up-progress-bar").style.width = pct + "%"; }
+    );
+    resetUploadPage();
+  } catch (err) {
+    alert("Erro ao enviar: " + err.message);
+  } finally {
+    upSubmit.textContent = "Salvar documento";
+    updateSaveState();
   }
 });
 
@@ -217,6 +367,14 @@ function renderTabelas() {
     ? recentes.map(d => docRow(d)).join("")
     : '<tr class="empty-row"><td colspan="5">Nenhum documento enviado ainda.</td></tr>';
   bindDeleteButtons(recentBody);
+
+  // Tabela "enviados recentemente" da página Upload: só os 5 mais novos
+  const upBody = document.getElementById("upload-recent-body");
+  const ultimos = documentos.slice(0, 5);
+  upBody.innerHTML = ultimos.length
+    ? ultimos.map(d => docRow(d)).join("")
+    : '<tr class="empty-row"><td colspan="5">Nenhum documento enviado ainda.</td></tr>';
+  bindDeleteButtons(upBody);
 
   // Tabela completa (página Documentos)
   const docBody = document.getElementById("doc-table-body");
@@ -284,7 +442,9 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById("greeting-title").textContent =
       `Olá, ${nome.charAt(0).toUpperCase() + nome.slice(1)} 👋`;
 
-    populateMonthSelect();
+    populateMonthSelect("upload-mes");
+    populateMonthSelect("up-mes");
+    iniciarPaginaUpload();
     listenDocumentos();
   } else {
     document.getElementById("login-screen").hidden = false;

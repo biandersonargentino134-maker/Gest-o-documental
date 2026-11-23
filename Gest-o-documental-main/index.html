@@ -45,6 +45,7 @@
     <nav>
       <a href="#" class="nav-item active" data-view="inicio"><span class="icon">🏠</span> Início</a>
       <a href="#" class="nav-item" data-view="empresas"><span class="icon">🏢</span> Empresas</a>
+      <a href="#" class="nav-item" data-view="upload"><span class="icon">⬆</span> Upload</a>
       <a href="#" class="nav-item" data-view="documentos"><span class="icon">🗂️</span> Documentos</a>
     </nav>
     <div class="sidebar-spacer"></div>
@@ -61,7 +62,7 @@
           <h1 id="greeting-title">Olá 👋</h1>
           <p>Aqui está um resumo dos seus documentos.</p>
         </div>
-        <button class="btn-primary" data-goto="documentos">⬆ Enviar documento</button>
+        <button class="btn-primary" data-goto="upload">⬆ Enviar documento</button>
       </div>
 
       <div class="stats-grid">
@@ -90,7 +91,7 @@
           <div><div class="quick-title">Empresas</div><div class="quick-sub">Ver todas as empresas</div></div>
           <span class="quick-arrow">→</span>
         </button>
-        <button class="quick-card" data-goto="documentos">
+        <button class="quick-card" data-goto="upload">
           <span class="quick-icon">⬆</span>
           <div><div class="quick-title">Enviar documento</div><div class="quick-sub">Adicionar novo arquivo</div></div>
           <span class="quick-arrow">→</span>
@@ -123,6 +124,68 @@
         </div>
       </div>
       <div class="empresas-grid" id="empresas-grid"></div>
+    </section>
+
+    <!-- ---- UPLOAD ---- -->
+    <section class="view" id="view-upload">
+      <div class="page-header">
+        <div>
+          <h1>Enviar documento</h1>
+          <p>Adicione um documento e organize suas informações.</p>
+        </div>
+      </div>
+
+      <div class="upload-grid">
+        <!-- Esquerda: área de arrastar e soltar -->
+        <div class="dropzone-card" id="dropzone">
+          <input type="file" id="up-file" hidden>
+          <div class="dropzone-icon">⬆</div>
+          <div class="dropzone-title" id="dropzone-title">Arraste seu arquivo aqui</div>
+          <div class="dropzone-or">ou</div>
+          <button type="button" class="btn-primary" id="select-file-btn">Selecionar arquivo</button>
+          <div class="dropzone-sub">PDF, JPG, PNG, DOCX — até 20 MB</div>
+        </div>
+
+        <!-- Direita: detalhes do documento (as tags obrigatórias) -->
+        <div class="details-card">
+          <h3>Detalhes do documento</h3>
+          <div class="field">
+            <label for="up-empresa">Empresa</label>
+            <input type="text" id="up-empresa" required>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="up-ano">Ano</label>
+              <input type="number" id="up-ano" required>
+            </div>
+            <div class="field">
+              <label for="up-mes">Mês</label>
+              <select id="up-mes" required></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="up-tipo">Categoria (tipo de imposto)</label>
+            <input type="text" id="up-tipo" required>
+          </div>
+          <div class="field">
+            <label>Tags</label>
+            <div class="tags-row" id="up-tags-row"></div>
+          </div>
+          <div class="progress-wrap" id="up-progress-wrap"><div class="progress-bar" id="up-progress-bar"></div></div>
+          <button class="btn-primary block" id="up-submit" disabled>Salvar documento</button>
+          <div class="save-hint" id="up-hint">Selecione um arquivo para habilitar o salvamento.</div>
+        </div>
+      </div>
+
+      <div class="section-header-row">
+        <h3 class="section-title">Documentos enviados recentemente</h3>
+      </div>
+      <div class="table-card">
+        <table class="doc-table">
+          <thead><tr><th>Documento</th><th>Empresa</th><th>Categoria</th><th>Data</th><th>Ação</th></tr></thead>
+          <tbody id="upload-recent-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ---- DOCUMENTOS ---- -->
