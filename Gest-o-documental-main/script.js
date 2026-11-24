@@ -102,7 +102,7 @@ function populateMonthSelect(selectId) {
 
 // ---------- Envio de documento (lógica compartilhada) ----------
 // Toda a parte "pesada" do envio fica aqui, separada da tela.
-async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtras = [] }, onProgress = () => {}) {
+async function enviarDocumento({ file, empresa, tipoImposto, mes, ano }, onProgress = () => {}) {
   if (file.size > MAX_FILE_BYTES) {
     throw new Error("Arquivo maior que 20 MB. Escolha um arquivo menor.");
   }
@@ -132,7 +132,6 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtra
   await addDoc(collection(db, "documentos"), {
     nomeArquivo: file.name,
     empresa, tipoImposto, mes, ano: Number(ano),
-    tagsExtras,
     tamanho: file.size,
     url: result.url,
     fileId: result.fileId,
@@ -144,7 +143,6 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano, tagsExtra
 
 // ---------- Página de Upload ----------
 let selectedFile = null; // arquivo escolhido, esperando o clique em "Salvar"
-let extraTags = [];      // tags extras digitadas pelo usuário (ex: "urgente")
 
 const dropzone = document.getElementById("dropzone");
 const upFileInput = document.getElementById("up-file");
@@ -193,7 +191,8 @@ function updateSaveState() {
     selectedFile ? "" : "Selecione um arquivo para habilitar o salvamento.";
 }
 
-// Desenha as tags: as 3 automáticas (categoria, mês, ano) + as extras
+// Desenha as 3 tags automáticas (categoria, mês e ano), que acompanham
+// o que foi escolhido nos campos ao lado
 function renderUploadTags() {
   const wrap = document.getElementById("up-tags-row");
   const baseTags = [
@@ -202,32 +201,16 @@ function renderUploadTags() {
     document.getElementById("up-ano").value
   ].filter(Boolean);
 
-  let html = baseTags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join("");
-  html += extraTags.map((t, i) =>
-    `<span class="tag-chip">${escapeHtml(t)}<button type="button" data-remove-tag="${i}">✕</button></span>`).join("");
-  html += `<button type="button" class="tag-chip-add" id="add-extra-tag-btn">+ adicionar</button>`;
-  wrap.innerHTML = html;
-
-  wrap.querySelectorAll("[data-remove-tag]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      extraTags.splice(Number(btn.dataset.removeTag), 1);
-      renderUploadTags();
-    });
-  });
-  document.getElementById("add-extra-tag-btn").addEventListener("click", () => {
-    const val = window.prompt("Nova tag:");
-    if (val && val.trim()) { extraTags.push(val.trim()); renderUploadTags(); }
-  });
+  wrap.innerHTML = baseTags.map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join("");
 }
 ["up-tipo", "up-mes", "up-ano"].forEach(id => {
   document.getElementById(id).addEventListener("input", renderUploadTags);
   document.getElementById(id).addEventListener("change", renderUploadTags);
 });
 
-// Limpa o arquivo e as tags extras depois de um envio
+// Limpa o arquivo escolhido depois de um envio
 function resetUploadPage() {
   selectedFile = null;
-  extraTags = [];
   upFileInput.value = "";
   document.getElementById("dropzone-title").textContent = "Arraste seu arquivo aqui";
   const nome = dropzone.querySelector(".dropzone-filename");
@@ -265,7 +248,7 @@ upSubmit.addEventListener("click", async () => {
   document.getElementById("up-progress-wrap").style.display = "block";
   try {
     await enviarDocumento(
-      { file: selectedFile, empresa, tipoImposto, mes, ano, tagsExtras: extraTags },
+      { file: selectedFile, empresa, tipoImposto, mes, ano },
       (pct) => { document.getElementById("up-progress-bar").style.width = pct + "%"; }
     );
     resetUploadPage();
