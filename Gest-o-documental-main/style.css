@@ -289,10 +289,22 @@ table.doc-table{width:100%;border-collapse:collapse;}
 .btn-danger-solid{background:var(--red);}
 .btn-danger-solid:hover{background:#a53225;}
 
-/* ---------- Comprovante de pagamento (dentro da página do documento) ---------- */
-.comprovante-inline{
-  background:#fffaf0;border:1px solid #f0dcae;border-radius:var(--radius-sm);
-  padding:14px 16px;margin-bottom:18px;
+/* ---------- Página de Comprovante de pagamento ---------- */
+/* Tom âmbar de propósito, pra ficar claro que é outra tela (não o documento) */
+#comprovante-back-btn{margin-bottom:20px;}
+.comprovante-card{
+  background:#fffaf0;border:1px solid #f0dcae;border-radius:var(--radius);
+  padding:24px;box-shadow:var(--shadow);
 }
-.comprovante-inline-title{font-size:13px;font-weight:700;color:#7a5b0a;margin-bottom:10px;}
-.comprovante-inline-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.comprovante-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.comprovante-badge{
+  display:inline-flex;align-items:center;gap:6px;background:#f3e0ad;color:#7a5b0a;
+  font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:20px;
+}
+.comprovante-subtitle{font-size:13px;color:#8a7550;flex:1;min-width:180px;}
+.comprovante-empty{padding:64px 20px;text-align:center;color:var(--text-muted);}
+.comprovante-empty-icon{
+  width:52px;height:52px;border-radius:14px;background:#f3e0ad;color:#7a5b0a;
+  display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 16px;
+}
+.comprovante-empty p{margin:0 0 18px;font-size:14px;}

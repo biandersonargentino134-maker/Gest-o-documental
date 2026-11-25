@@ -218,23 +218,38 @@
           </div>
           <div class="viewer-actions">
             <button class="btn-primary" id="viewer-download-btn">⬇ Baixar arquivo</button>
+            <button class="btn-ghost" id="viewer-comprovante-btn">📎 Comprovante de pagamento</button>
             <button class="btn-text-danger" id="viewer-delete-btn">Excluir documento</button>
           </div>
         </div>
-        <!-- Comprovante de pagamento (anexo opcional do documento) -->
-        <div class="comprovante-inline">
-          <div class="comprovante-inline-title">📎 Comprovante de pagamento</div>
-          <div class="comprovante-inline-row">
-            <span id="comprovante-inline-status" class="doc-name-sub"></span>
-            <input type="file" id="comprovante-file-input" hidden>
-            <button class="btn-ghost" id="comprovante-add-btn">+ Adicionar comprovante</button>
-            <a class="action-link" id="comprovante-open-link" target="_blank" rel="noopener" hidden>Abrir</a>
-            <button class="btn-text-danger" id="comprovante-delete-btn" hidden>Excluir comprovante</button>
+        <div class="viewer-frame-wrap">
+          <iframe id="viewer-iframe" src="" title="Documento"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- COMPROVANTE DE PAGAMENTO (página própria, visual diferente) ---- -->
+    <section class="view" id="view-comprovante">
+      <button class="btn-ghost" id="comprovante-back-btn">← Voltar ao documento</button>
+      <div class="comprovante-card">
+        <div class="comprovante-header">
+          <span class="comprovante-badge">📎 Comprovante de pagamento</span>
+          <div class="comprovante-subtitle" id="comprovante-subtitle"></div>
+          <div class="viewer-actions" id="comprovante-actions" hidden>
+            <button class="btn-primary" id="comprovante-download-btn">⬇ Baixar</button>
+            <button class="btn-text-danger" id="comprovante-delete-btn">Excluir comprovante</button>
           </div>
         </div>
 
-        <div class="viewer-frame-wrap">
-          <iframe id="viewer-iframe" src="" title="Documento"></iframe>
+        <div class="viewer-frame-wrap" id="comprovante-frame-wrap" hidden>
+          <iframe id="comprovante-iframe" src="" title="Comprovante"></iframe>
+        </div>
+
+        <div class="comprovante-empty" id="comprovante-empty">
+          <div class="comprovante-empty-icon">📎</div>
+          <p>Nenhum comprovante adicionado ainda.</p>
+          <input type="file" id="comprovante-file-input" hidden>
+          <button class="btn-primary" id="comprovante-add-btn">+ Adicionar comprovante</button>
         </div>
       </div>
     </section>

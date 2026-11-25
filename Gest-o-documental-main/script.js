@@ -1,4 +1,4 @@
-// ---------- Etapa 7, commit 1: anexo de comprovante de pagamento ----------
+// ---------- Etapa 7, commit 2: página própria para o comprovante ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -17,7 +17,7 @@ const firebaseConfig = {
   appId: "1:810363195574:web:691598d28e0abee306d617"
 };
 
-
+// Cole aqui a URL do seu Apps Script (a que termina em /exec)
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzFYVYbzMp1sPTwt26BzPuhA9q9IgJ0EcevyboUsHgUcMQlxU4GlnFAf9BSupSij6bY/exec";
 
 const app = initializeApp(firebaseConfig);
@@ -373,7 +373,12 @@ function openViewer(docId) {
     comprovanteFileId: d.comprovante?.fileId || null
   });
 
-  renderComprovanteInline(d);
+  // Botão que leva pra página do comprovante
+  setComprovanteButtonLabel(d);
+  document.getElementById("viewer-comprovante-btn").onclick = () => {
+    renderComprovantePage(d);
+    goToView("comprovante");
+  };
 
   goToView("visualizador");
 }
@@ -383,25 +388,43 @@ document.getElementById("viewer-back-btn").addEventListener("click", () => {
   goToView(lastListView);
 });
 
-// ---------- Comprovante de pagamento ----------
+// ---------- Comprovante de pagamento (página própria) ----------
 // O comprovante fica guardado como um "campo extra" (comprovante) dentro do
 // próprio documento no Firestore, e o arquivo dele vai pra mesma pasta da
 // empresa no Drive. Se não tem comprovante, o campo fica vazio (null).
 
-// Desenha a área de comprovante dentro da página do documento
-function renderComprovanteInline(d) {
+// Troca o texto do botão na página do documento: "Ver" se já existe, "Adicionar" se não
+function setComprovanteButtonLabel(d) {
+  document.getElementById("viewer-comprovante-btn").textContent =
+    d.comprovante ? "📎 Ver comprovante de pagamento" : "📎 Adicionar comprovante de pagamento";
+}
+
+// Desenha a página: com comprovante mostra o arquivo (Baixar/Excluir);
+// sem comprovante mostra o estado vazio com o botão de adicionar.
+function renderComprovantePage(d) {
   const c = d.comprovante;
-  document.getElementById("comprovante-inline-status").textContent = c ? c.nomeArquivo : "Nenhum comprovante anexado.";
-  document.getElementById("comprovante-add-btn").hidden = !!c;
-  const link = document.getElementById("comprovante-open-link");
-  link.hidden = !c;
-  const del = document.getElementById("comprovante-delete-btn");
-  del.hidden = !c;
+  document.getElementById("comprovante-subtitle").textContent =
+    `Referente a: ${d.nomeArquivo} · ${d.empresa} · ${d.mes}/${d.ano}`;
+  document.getElementById("comprovante-actions").hidden = !c;
+  document.getElementById("comprovante-frame-wrap").hidden = !c;
+  document.getElementById("comprovante-empty").hidden = !!c;
+
   if (c) {
-    link.href = c.url;
-    del.onclick = () => openDeleteModal({ type: "comprovante", docId: d.id, fileId: c.fileId, nome: c.nomeArquivo });
+    document.getElementById("comprovante-iframe").src = `https://drive.google.com/file/d/${c.fileId}/preview`;
+    document.getElementById("comprovante-download-btn").onclick = () => {
+      window.open(`https://drive.google.com/uc?export=download&id=${c.fileId}`, "_blank");
+    };
+    document.getElementById("comprovante-delete-btn").onclick = () =>
+      openDeleteModal({ type: "comprovante", docId: d.id, fileId: c.fileId, nome: c.nomeArquivo });
+  } else {
+    document.getElementById("comprovante-iframe").src = "";
   }
 }
+
+document.getElementById("comprovante-back-btn").addEventListener("click", () => {
+  document.getElementById("comprovante-iframe").src = "";
+  goToView("visualizador");
+});
 
 document.getElementById("comprovante-add-btn").addEventListener("click", () => {
   document.getElementById("comprovante-file-input").click();
@@ -578,10 +601,13 @@ function listenDocumentos() {
     renderTabelas();
     renderEmpresas();
 
-    // Se tem um documento aberto, atualiza a área de comprovante dele
+    // Se tem um documento aberto, mantém o botão e a página de comprovante atualizados
     const atual = documentos.find(x => x.id === currentViewedDocId);
-    if (atual && document.getElementById("view-visualizador").classList.contains("active")) {
-      renderComprovanteInline(atual);
+    if (atual) {
+      setComprovanteButtonLabel(atual);
+      if (document.getElementById("view-comprovante").classList.contains("active")) {
+        renderComprovantePage(atual);
+      }
     }
   });
 }
