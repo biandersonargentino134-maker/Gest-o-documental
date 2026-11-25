@@ -1,7 +1,8 @@
-// ---------- Etapa 6, commit 2: botão de download ----------
+// ---------- Etapa 6, commit 3: exclusão com confirmação de senha ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
+  EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, addDoc, doc, deleteDoc, onSnapshot, query, serverTimestamp
@@ -29,6 +30,7 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Ag
 
 // "Memória" da página: cópia dos documentos que vêm do Firestore
 let documentos = [];
+let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
 // ---------- Funções utilitárias ----------
 function formatBytes(bytes) {
@@ -259,18 +261,61 @@ upSubmit.addEventListener("click", async () => {
   }
 });
 
-// ---------- Exclusão ----------
-async function excluirDocumento(docId, fileId, nome) {
-  if (!confirm(`Excluir "${nome}"? Essa ação não pode ser desfeita.`)) return;
-  try {
-    if (fileId) {
-      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId }) });
-    }
-    await deleteDoc(doc(db, "documentos", docId));
-  } catch (err) {
-    alert("Erro ao excluir: " + err.message);
-  }
+// ---------- Exclusão com confirmação de senha ----------
+// Antes era só um "tem certeza?" (confirm). Agora a pessoa precisa digitar
+// a senha da conta de novo — evita exclusão por engano ou por alguém que
+// pegou o computador destravado.
+let pendingDelete = null; // guarda o que está prestes a ser excluído
+const deleteOverlay = document.getElementById("delete-modal-overlay");
+
+function openDeleteModal(docId, fileId, nome) {
+  pendingDelete = { docId, fileId, nome };
+  document.getElementById("delete-modal-filename").textContent = nome;
+  document.getElementById("delete-password").value = "";
+  document.getElementById("delete-modal-error").textContent = "";
+  deleteOverlay.hidden = false;
+  document.getElementById("delete-password").focus();
 }
+function closeDeleteModal() {
+  deleteOverlay.hidden = true;
+  pendingDelete = null;
+}
+document.getElementById("cancel-delete-btn").addEventListener("click", closeDeleteModal);
+deleteOverlay.addEventListener("click", (e) => { if (e.target === deleteOverlay) closeDeleteModal(); });
+
+document.getElementById("delete-confirm-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!pendingDelete) return;
+  const senha = document.getElementById("delete-password").value;
+  const erro = document.getElementById("delete-modal-error");
+  const btn = document.getElementById("confirm-delete-btn");
+  erro.textContent = "";
+  btn.disabled = true;
+  btn.textContent = "Excluindo...";
+  try {
+    // 1) Confere a senha de verdade no Firebase (reautenticação)
+    const credencial = EmailAuthProvider.credential(currentUser.email, senha);
+    await reauthenticateWithCredential(currentUser, credencial);
+
+    // 2) Senha certa: apaga o arquivo do Drive e o registro do banco
+    if (pendingDelete.fileId) {
+      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: pendingDelete.fileId }) });
+    }
+    await deleteDoc(doc(db, "documentos", pendingDelete.docId));
+
+    // Se estava vendo o documento que acabou de ser excluído, volta pra lista
+    const noVisualizador = document.getElementById("view-visualizador").classList.contains("active");
+    closeDeleteModal();
+    if (noVisualizador) goToView(lastListView);
+  } catch (err) {
+    erro.textContent = (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential")
+      ? "Senha incorreta."
+      : "Erro ao excluir: " + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Excluir documento";
+  }
+});
 
 // ---------- Visualizador de documento (abre o arquivo sem sair do site) ----------
 let lastListView = "documentos"; // de qual página o usuário veio (pro botão "Voltar")
@@ -297,6 +342,9 @@ function openViewer(docId) {
   document.getElementById("viewer-download-btn").onclick = () => {
     window.open(`https://drive.google.com/uc?export=download&id=${d.fileId}`, "_blank");
   };
+
+  // Excluir direto da página do documento (também pede a senha)
+  document.getElementById("viewer-delete-btn").onclick = () => openDeleteModal(d.id, d.fileId, d.nomeArquivo);
 
   goToView("visualizador");
 }
@@ -343,7 +391,7 @@ function bindRowActions(container) {
   });
   container.querySelectorAll(".btn-text-danger").forEach(btn => {
     btn.addEventListener("click", () => {
-      excluirDocumento(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
+      openDeleteModal(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
     });
   });
 }
@@ -421,6 +469,7 @@ function listenDocumentos() {
 }
 
 onAuthStateChanged(auth, (user) => {
+  currentUser = user;
   if (user) {
     document.getElementById("login-screen").hidden = true;
     document.getElementById("main-app").hidden = false;

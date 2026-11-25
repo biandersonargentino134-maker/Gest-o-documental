@@ -272,3 +272,19 @@ table.doc-table{width:100%;border-collapse:collapse;}
 .viewer-meta{font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .viewer-frame-wrap{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:#f0f1f0;}
 .viewer-frame-wrap iframe{width:100%;height:72vh;border:none;display:block;}
+
+/* ---------- Janela (modal) de confirmação ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(15,20,18,0.45);backdrop-filter:blur(2px);
+  display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;
+}
+.modal{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  width:100%;max-width:440px;padding:26px;box-shadow:0 20px 60px rgba(0,0,0,0.2);
+}
+.modal h3{margin:0 0 4px;font-size:18px;font-weight:700;}
+.modal .sub{color:var(--text-muted);font-size:12.5px;margin:0 0 20px;}
+.modal-error{color:var(--red);font-size:13px;min-height:16px;}
+.modal-actions{display:flex;gap:10px;margin-top:18px;}
+.btn-danger-solid{background:var(--red);}
+.btn-danger-solid:hover{background:#a53225;}

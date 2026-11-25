@@ -218,6 +218,7 @@
           </div>
           <div class="viewer-actions">
             <button class="btn-primary" id="viewer-download-btn">⬇ Baixar arquivo</button>
+            <button class="btn-text-danger" id="viewer-delete-btn">Excluir documento</button>
           </div>
         </div>
         <div class="viewer-frame-wrap">
@@ -227,6 +228,25 @@
     </section>
 
   </main>
+</div>
+
+<!-- ===================== JANELA DE EXCLUSÃO (PEDE A SENHA) ===================== -->
+<div class="modal-overlay" id="delete-modal-overlay" hidden>
+  <div class="modal">
+    <h3>Confirmar exclusão</h3>
+    <p class="sub">Digite sua senha para excluir "<b id="delete-modal-filename"></b>". Essa ação não pode ser desfeita.</p>
+    <form id="delete-confirm-form">
+      <div class="field">
+        <label for="delete-password">Sua senha</label>
+        <input type="password" id="delete-password" required autocomplete="current-password">
+      </div>
+      <div id="delete-modal-error" class="modal-error"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-ghost" id="cancel-delete-btn">Cancelar</button>
+        <button type="submit" class="btn-primary btn-danger-solid" id="confirm-delete-btn">Excluir documento</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script type="module" src="script.js"></script>
