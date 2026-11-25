@@ -197,7 +197,7 @@ table.doc-table{width:100%;border-collapse:collapse;}
   font-size:11.5px;font-weight:600;padding:4px 11px;border-radius:20px;
 }
 .doc-actions-cell{display:flex;gap:6px;align-items:center;white-space:nowrap;}
-.action-link{font-size:12.5px;font-weight:600;color:var(--accent-dark);padding:5px 8px;border-radius:6px;}
+.action-link{background:none;border:none;font-size:12.5px;font-weight:600;color:var(--accent-dark);padding:5px 8px;border-radius:6px;}
 .action-link:hover{background:var(--accent-light);}
 .btn-text-danger{background:none;border:none;color:var(--red);font-size:13px;font-weight:600;padding:6px 8px;border-radius:6px;}
 .btn-text-danger:hover{background:var(--red-light);}
@@ -245,16 +245,6 @@ table.doc-table{width:100%;border-collapse:collapse;}
   display:inline-flex;align-items:center;gap:7px;background:var(--accent-light);color:var(--accent-dark);
   font-size:12px;font-weight:600;padding:5px 12px;border-radius:20px;
 }
-.tag-chip button{
-  background:none;border:none;color:var(--accent-dark);font-size:13px;line-height:1;padding:2px;
-  opacity:.65;border-radius:50%;width:16px;height:16px;
-}
-.tag-chip button:hover{opacity:1;background:rgba(14,107,79,0.18);}
-.tag-chip-add{
-  background:var(--surface);border:1px dashed var(--border);color:var(--text-muted);
-  font-size:12px;font-weight:600;padding:6px 13px;border-radius:20px;
-}
-.tag-chip-add:hover{border-color:var(--accent);color:var(--accent-dark);}
 
 /* Barra de progresso e dica do botão */
 .progress-wrap{height:6px;background:var(--accent-light);border-radius:4px;overflow:hidden;margin:14px 0;display:none;}
@@ -262,3 +252,22 @@ table.doc-table{width:100%;border-collapse:collapse;}
 .save-hint{font-size:12px;color:var(--text-muted);text-align:center;margin-top:10px;}
 
 @media(max-width:900px){ .upload-grid{grid-template-columns:1fr;} }
+
+/* ---------- Botão secundário ---------- */
+.btn-ghost{
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  border-radius:var(--radius-sm);padding:10px 16px;font-weight:600;font-size:13.5px;
+}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent-dark);}
+
+/* ---------- Visualizador de documento ---------- */
+#viewer-back-btn{margin-bottom:20px;}
+.viewer-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px;box-shadow:var(--shadow);
+}
+.viewer-info{margin-bottom:18px;}
+.viewer-info h2{font-size:19px;font-weight:700;margin:0 0 8px;word-break:break-word;}
+.viewer-meta{font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.viewer-frame-wrap{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:#f0f1f0;}
+.viewer-frame-wrap iframe{width:100%;height:72vh;border:none;display:block;}

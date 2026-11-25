@@ -1,4 +1,4 @@
-// ---------- Etapa 3, commit 3: upload e exclusão via Google Drive (Apps Script) ----------
+// ---------- Etapa 6, commit 1: visualizador de documento ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
@@ -16,8 +16,7 @@ const firebaseConfig = {
   appId: "1:810363195574:web:691598d28e0abee306d617"
 };
 
-// Cole aqui a URL que o Apps Script te deu quando você implantou o Code.gs
-// como "App da Web" (termina em /exec).
+
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzFYVYbzMp1sPTwt26BzPuhA9q9IgJ0EcevyboUsHgUcMQlxU4GlnFAf9BSupSij6bY/exec";
 
 const app = initializeApp(firebaseConfig);
@@ -273,6 +272,35 @@ async function excluirDocumento(docId, fileId, nome) {
   }
 }
 
+// ---------- Visualizador de documento (abre o arquivo sem sair do site) ----------
+let lastListView = "documentos"; // de qual página o usuário veio (pro botão "Voltar")
+
+// Descobre qual página está visível agora
+function getCurrentActiveView() {
+  const ativa = document.querySelector(".view.active");
+  return ativa ? ativa.id.replace("view-", "") : "inicio";
+}
+
+// Mostra o documento dentro do site, usando o modo de pré-visualização do Drive
+function openViewer(docId) {
+  const d = documentos.find(x => x.id === docId);
+  if (!d) return;
+  if (!d.fileId) { alert("Esse documento não tem arquivo no Drive para visualizar."); return; }
+  lastListView = getCurrentActiveView();
+
+  document.getElementById("viewer-filename").textContent = d.nomeArquivo;
+  document.getElementById("viewer-meta").innerHTML =
+    `<span class="pill">${escapeHtml(d.tipoImposto)}</span> ${escapeHtml(d.empresa)} · ${escapeHtml(d.mes)}/${d.ano} · ${formatBytes(d.tamanho)}`;
+  document.getElementById("viewer-iframe").src = `https://drive.google.com/file/d/${d.fileId}/preview`;
+
+  goToView("visualizador");
+}
+
+document.getElementById("viewer-back-btn").addEventListener("click", () => {
+  document.getElementById("viewer-iframe").src = ""; // para de carregar o arquivo
+  goToView(lastListView);
+});
+
 // ---------- Desenho das tabelas ----------
 
 // Monta o HTML de UMA linha de tabela. Serve para as duas tabelas
@@ -296,15 +324,18 @@ function docRow(d, { completa = false } = {}) {
         : `<td>${escapeHtml(d.uploadedAtLabel || "")}</td>`}
       <td>
         <div class="doc-actions-cell">
-          ${d.url ? `<a class="action-link" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">Abrir</a>` : ""}
+          ${d.fileId ? `<button type="button" class="action-link" data-action="view" data-id="${d.id}">Abrir</button>` : ""}
           <button class="btn-text-danger" data-id="${d.id}" data-fileid="${escapeHtml(d.fileId || "")}" data-nome="${escapeHtml(d.nomeArquivo)}">Excluir</button>
         </div>
       </td>
     </tr>`;
 }
 
-// Liga o clique dos botões "Excluir" depois que uma tabela é desenhada
-function bindDeleteButtons(container) {
+// Liga os cliques dos botões "Abrir" e "Excluir" depois que uma tabela é desenhada
+function bindRowActions(container) {
+  container.querySelectorAll('[data-action="view"]').forEach(btn => {
+    btn.addEventListener("click", () => openViewer(btn.dataset.id));
+  });
   container.querySelectorAll(".btn-text-danger").forEach(btn => {
     btn.addEventListener("click", () => {
       excluirDocumento(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
@@ -319,7 +350,7 @@ function renderTabelas() {
   recentBody.innerHTML = recentes.length
     ? recentes.map(d => docRow(d)).join("")
     : '<tr class="empty-row"><td colspan="5">Nenhum documento enviado ainda.</td></tr>';
-  bindDeleteButtons(recentBody);
+  bindRowActions(recentBody);
 
   // Tabela "enviados recentemente" da página Upload: só os 5 mais novos
   const upBody = document.getElementById("upload-recent-body");
@@ -327,14 +358,14 @@ function renderTabelas() {
   upBody.innerHTML = ultimos.length
     ? ultimos.map(d => docRow(d)).join("")
     : '<tr class="empty-row"><td colspan="5">Nenhum documento enviado ainda.</td></tr>';
-  bindDeleteButtons(upBody);
+  bindRowActions(upBody);
 
   // Tabela completa (página Documentos)
   const docBody = document.getElementById("doc-table-body");
   docBody.innerHTML = documentos.length
     ? documentos.map(d => docRow(d, { completa: true })).join("")
     : '<tr class="empty-row"><td colspan="6">Nenhum documento enviado ainda.</td></tr>';
-  bindDeleteButtons(docBody);
+  bindRowActions(docBody);
 }
 
 // Página Empresas: ainda não existe um cadastro de empresas, então a lista
