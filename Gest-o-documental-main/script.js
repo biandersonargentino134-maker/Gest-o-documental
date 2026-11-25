@@ -1,11 +1,11 @@
-// ---------- Etapa 6, commit 3: exclusão com confirmação de senha ----------
+// ---------- Etapa 7, commit 1: anexo de comprovante de pagamento ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
   EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, doc, deleteDoc, onSnapshot, query, serverTimestamp
+  getFirestore, collection, addDoc, doc, deleteDoc, updateDoc, onSnapshot, query, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -17,7 +17,7 @@ const firebaseConfig = {
   appId: "1:810363195574:web:691598d28e0abee306d617"
 };
 
-// Cole aqui a URL do seu Apps Script (a que termina em /exec)
+
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzFYVYbzMp1sPTwt26BzPuhA9q9IgJ0EcevyboUsHgUcMQlxU4GlnFAf9BSupSij6bY/exec";
 
 const app = initializeApp(firebaseConfig);
@@ -30,6 +30,7 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Ag
 
 // "Memória" da página: cópia dos documentos que vêm do Firestore
 let documentos = [];
+let currentViewedDocId = null; // documento aberto no visualizador agora
 let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
 // ---------- Funções utilitárias ----------
@@ -38,6 +39,11 @@ function formatBytes(bytes) {
   const gb = bytes / (1024 ** 3);
   if (gb >= 1) return gb.toFixed(2) + " GB";
   return (bytes / (1024 ** 2)).toFixed(1) + " MB";
+}
+
+// Espaço que um documento ocupa no Drive: o arquivo + o comprovante (se tiver)
+function tamanhoTotal(d) {
+  return (d.tamanho || 0) + (d.comprovante?.tamanho || 0);
 }
 
 // Evita que nomes com símbolos (< > etc.) bagunçem o HTML da página
@@ -107,7 +113,7 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano }, onProgr
   if (file.size > MAX_FILE_BYTES) {
     throw new Error("Arquivo maior que 20 MB. Escolha um arquivo menor.");
   }
-  const totalUsado = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
+  const totalUsado = documentos.reduce((soma, d) => soma + tamanhoTotal(d), 0);
   if (totalUsado + file.size > QUOTA_BYTES) {
     throw new Error("Espaço insuficiente. O limite é de 10 GB.");
   }
@@ -268,11 +274,14 @@ upSubmit.addEventListener("click", async () => {
 let pendingDelete = null; // guarda o que está prestes a ser excluído
 const deleteOverlay = document.getElementById("delete-modal-overlay");
 
-function openDeleteModal(docId, fileId, nome) {
-  pendingDelete = { docId, fileId, nome };
+// type: "documento" ou "comprovante" — a mesma janela de senha serve pros dois
+function openDeleteModal({ type = "documento", docId, fileId, nome, comprovanteFileId = null }) {
+  pendingDelete = { type, docId, fileId, nome, comprovanteFileId };
   document.getElementById("delete-modal-filename").textContent = nome;
   document.getElementById("delete-password").value = "";
   document.getElementById("delete-modal-error").textContent = "";
+  document.getElementById("confirm-delete-btn").textContent =
+    type === "comprovante" ? "Excluir comprovante" : "Excluir documento";
   deleteOverlay.hidden = false;
   document.getElementById("delete-password").focus();
 }
@@ -286,6 +295,8 @@ deleteOverlay.addEventListener("click", (e) => { if (e.target === deleteOverlay)
 document.getElementById("delete-confirm-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!pendingDelete) return;
+  const alvo = pendingDelete; // cópia local: pendingDelete é zerado quando a janela fecha
+  const ehComprovante = alvo.type === "comprovante";
   const senha = document.getElementById("delete-password").value;
   const erro = document.getElementById("delete-modal-error");
   const btn = document.getElementById("confirm-delete-btn");
@@ -297,14 +308,26 @@ document.getElementById("delete-confirm-form").addEventListener("submit", async 
     const credencial = EmailAuthProvider.credential(currentUser.email, senha);
     await reauthenticateWithCredential(currentUser, credencial);
 
-    // 2) Senha certa: apaga o arquivo do Drive e o registro do banco
-    if (pendingDelete.fileId) {
-      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: pendingDelete.fileId }) });
+    // 2) Senha certa: apaga
+    if (ehComprovante) {
+      // só o comprovante: some o arquivo do Drive e o campo do documento
+      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
+      await updateDoc(doc(db, "documentos", alvo.docId), { comprovante: null });
+    } else {
+      if (alvo.fileId) {
+        await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
+      }
+      // Se o documento tinha comprovante, apaga ele do Drive também (senão sobraria arquivo órfão)
+      if (alvo.comprovanteFileId) {
+        try {
+          await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.comprovanteFileId }) });
+        } catch (_) { /* se falhar, não trava a exclusão do documento */ }
+      }
+      await deleteDoc(doc(db, "documentos", alvo.docId));
     }
-    await deleteDoc(doc(db, "documentos", pendingDelete.docId));
 
     // Se estava vendo o documento que acabou de ser excluído, volta pra lista
-    const noVisualizador = document.getElementById("view-visualizador").classList.contains("active");
+    const noVisualizador = !ehComprovante && document.getElementById("view-visualizador").classList.contains("active");
     closeDeleteModal();
     if (noVisualizador) goToView(lastListView);
   } catch (err) {
@@ -313,7 +336,7 @@ document.getElementById("delete-confirm-form").addEventListener("submit", async 
       : "Erro ao excluir: " + err.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = "Excluir documento";
+    btn.textContent = ehComprovante ? "Excluir comprovante" : "Excluir documento";
   }
 });
 
@@ -332,6 +355,7 @@ function openViewer(docId) {
   if (!d) return;
   if (!d.fileId) { alert("Esse documento não tem arquivo no Drive para visualizar."); return; }
   lastListView = getCurrentActiveView();
+  currentViewedDocId = docId;
 
   document.getElementById("viewer-filename").textContent = d.nomeArquivo;
   document.getElementById("viewer-meta").innerHTML =
@@ -344,7 +368,12 @@ function openViewer(docId) {
   };
 
   // Excluir direto da página do documento (também pede a senha)
-  document.getElementById("viewer-delete-btn").onclick = () => openDeleteModal(d.id, d.fileId, d.nomeArquivo);
+  document.getElementById("viewer-delete-btn").onclick = () => openDeleteModal({
+    type: "documento", docId: d.id, fileId: d.fileId, nome: d.nomeArquivo,
+    comprovanteFileId: d.comprovante?.fileId || null
+  });
+
+  renderComprovanteInline(d);
 
   goToView("visualizador");
 }
@@ -352,6 +381,85 @@ function openViewer(docId) {
 document.getElementById("viewer-back-btn").addEventListener("click", () => {
   document.getElementById("viewer-iframe").src = ""; // para de carregar o arquivo
   goToView(lastListView);
+});
+
+// ---------- Comprovante de pagamento ----------
+// O comprovante fica guardado como um "campo extra" (comprovante) dentro do
+// próprio documento no Firestore, e o arquivo dele vai pra mesma pasta da
+// empresa no Drive. Se não tem comprovante, o campo fica vazio (null).
+
+// Desenha a área de comprovante dentro da página do documento
+function renderComprovanteInline(d) {
+  const c = d.comprovante;
+  document.getElementById("comprovante-inline-status").textContent = c ? c.nomeArquivo : "Nenhum comprovante anexado.";
+  document.getElementById("comprovante-add-btn").hidden = !!c;
+  const link = document.getElementById("comprovante-open-link");
+  link.hidden = !c;
+  const del = document.getElementById("comprovante-delete-btn");
+  del.hidden = !c;
+  if (c) {
+    link.href = c.url;
+    del.onclick = () => openDeleteModal({ type: "comprovante", docId: d.id, fileId: c.fileId, nome: c.nomeArquivo });
+  }
+}
+
+document.getElementById("comprovante-add-btn").addEventListener("click", () => {
+  document.getElementById("comprovante-file-input").click();
+});
+
+// Quando um arquivo de comprovante é escolhido: sobe pro Drive e guarda no documento
+document.getElementById("comprovante-file-input").addEventListener("change", async () => {
+  const input = document.getElementById("comprovante-file-input");
+  const file = input.files[0];
+  const d = documentos.find(x => x.id === currentViewedDocId);
+  if (!file || !d) return;
+
+  if (file.size > MAX_FILE_BYTES) {
+    alert("Arquivo maior que 20 MB. Escolha um arquivo menor.");
+    input.value = "";
+    return;
+  }
+  const totalUsado = documentos.reduce((soma, x) => soma + tamanhoTotal(x), 0);
+  if (totalUsado + file.size > QUOTA_BYTES) {
+    alert("Espaço insuficiente. O limite é de 10 GB.");
+    input.value = "";
+    return;
+  }
+
+  const btn = document.getElementById("comprovante-add-btn");
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+  try {
+    const fileData = await fileToBase64(file);
+    const response = await fetch(GAS_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "upload",
+        empresa: d.empresa,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        fileData
+      })
+    });
+    const result = await response.json();
+    if (result.error) throw new Error(result.error);
+
+    await updateDoc(doc(db, "documentos", d.id), {
+      comprovante: {
+        fileId: result.fileId,
+        url: result.url,
+        nomeArquivo: file.name,
+        tamanho: file.size,
+        uploadedAtLabel: new Date().toLocaleDateString("pt-BR")
+      }
+    });
+  } catch (err) {
+    alert("Erro ao enviar comprovante: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "+ Adicionar comprovante";
+    input.value = "";
+  }
 });
 
 // ---------- Desenho das tabelas ----------
@@ -391,7 +499,11 @@ function bindRowActions(container) {
   });
   container.querySelectorAll(".btn-text-danger").forEach(btn => {
     btn.addEventListener("click", () => {
-      openDeleteModal(btn.dataset.id, btn.dataset.fileid, btn.dataset.nome);
+      const d = documentos.find(x => x.id === btn.dataset.id);
+      openDeleteModal({
+        type: "documento", docId: btn.dataset.id, fileId: btn.dataset.fileid, nome: btn.dataset.nome,
+        comprovanteFileId: d?.comprovante?.fileId || null
+      });
     });
   });
 }
@@ -429,7 +541,7 @@ function renderEmpresas() {
   documentos.forEach(d => {
     if (!porEmpresa[d.empresa]) porEmpresa[d.empresa] = { qtd: 0, bytes: 0 };
     porEmpresa[d.empresa].qtd += 1;
-    porEmpresa[d.empresa].bytes += d.tamanho || 0;
+    porEmpresa[d.empresa].bytes += tamanhoTotal(d);
   });
   const nomes = Object.keys(porEmpresa).sort();
 
@@ -449,7 +561,7 @@ function renderEmpresas() {
 
 // Cartões de estatística do Início
 function renderEstatisticas() {
-  const totalBytes = documentos.reduce((soma, d) => soma + (d.tamanho || 0), 0);
+  const totalBytes = documentos.reduce((soma, d) => soma + tamanhoTotal(d), 0);
   const pct = Math.min(100, (totalBytes / QUOTA_BYTES) * 100);
   document.getElementById("stat-total-docs").textContent = documentos.length;
   document.getElementById("stat-space-used").textContent = formatBytes(totalBytes);
@@ -465,6 +577,12 @@ function listenDocumentos() {
     renderEstatisticas();
     renderTabelas();
     renderEmpresas();
+
+    // Se tem um documento aberto, atualiza a área de comprovante dele
+    const atual = documentos.find(x => x.id === currentViewedDocId);
+    if (atual && document.getElementById("view-visualizador").classList.contains("active")) {
+      renderComprovanteInline(atual);
+    }
   });
 }
 

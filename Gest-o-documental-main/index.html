@@ -221,6 +221,18 @@
             <button class="btn-text-danger" id="viewer-delete-btn">Excluir documento</button>
           </div>
         </div>
+        <!-- Comprovante de pagamento (anexo opcional do documento) -->
+        <div class="comprovante-inline">
+          <div class="comprovante-inline-title">📎 Comprovante de pagamento</div>
+          <div class="comprovante-inline-row">
+            <span id="comprovante-inline-status" class="doc-name-sub"></span>
+            <input type="file" id="comprovante-file-input" hidden>
+            <button class="btn-ghost" id="comprovante-add-btn">+ Adicionar comprovante</button>
+            <a class="action-link" id="comprovante-open-link" target="_blank" rel="noopener" hidden>Abrir</a>
+            <button class="btn-text-danger" id="comprovante-delete-btn" hidden>Excluir comprovante</button>
+          </div>
+        </div>
+
         <div class="viewer-frame-wrap">
           <iframe id="viewer-iframe" src="" title="Documento"></iframe>
         </div>

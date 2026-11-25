@@ -288,3 +288,11 @@ table.doc-table{width:100%;border-collapse:collapse;}
 .modal-actions{display:flex;gap:10px;margin-top:18px;}
 .btn-danger-solid{background:var(--red);}
 .btn-danger-solid:hover{background:#a53225;}
+
+/* ---------- Comprovante de pagamento (dentro da página do documento) ---------- */
+.comprovante-inline{
+  background:#fffaf0;border:1px solid #f0dcae;border-radius:var(--radius-sm);
+  padding:14px 16px;margin-bottom:18px;
+}
+.comprovante-inline-title{font-size:13px;font-weight:700;color:#7a5b0a;margin-bottom:10px;}
+.comprovante-inline-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
