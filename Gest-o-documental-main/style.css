@@ -266,7 +266,8 @@ table.doc-table{width:100%;border-collapse:collapse;}
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   padding:24px;box-shadow:var(--shadow);
 }
-.viewer-info{margin-bottom:18px;}
+.viewer-info{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+.viewer-actions{display:flex;gap:10px;flex-shrink:0;}
 .viewer-info h2{font-size:19px;font-weight:700;margin:0 0 8px;word-break:break-word;}
 .viewer-meta{font-size:12.5px;color:var(--text-muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .viewer-frame-wrap{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:#f0f1f0;}

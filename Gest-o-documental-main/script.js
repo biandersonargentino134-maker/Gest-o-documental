@@ -1,4 +1,4 @@
-// ---------- Etapa 6, commit 1: visualizador de documento ----------
+// ---------- Etapa 6, commit 2: botão de download ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
@@ -16,7 +16,7 @@ const firebaseConfig = {
   appId: "1:810363195574:web:691598d28e0abee306d617"
 };
 
-
+// Cole aqui a URL do seu Apps Script (a que termina em /exec)
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzFYVYbzMp1sPTwt26BzPuhA9q9IgJ0EcevyboUsHgUcMQlxU4GlnFAf9BSupSij6bY/exec";
 
 const app = initializeApp(firebaseConfig);
@@ -292,6 +292,11 @@ function openViewer(docId) {
   document.getElementById("viewer-meta").innerHTML =
     `<span class="pill">${escapeHtml(d.tipoImposto)}</span> ${escapeHtml(d.empresa)} · ${escapeHtml(d.mes)}/${d.ano} · ${formatBytes(d.tamanho)}`;
   document.getElementById("viewer-iframe").src = `https://drive.google.com/file/d/${d.fileId}/preview`;
+
+  // Baixa o arquivo direto, sem passar pela tela do Drive
+  document.getElementById("viewer-download-btn").onclick = () => {
+    window.open(`https://drive.google.com/uc?export=download&id=${d.fileId}`, "_blank");
+  };
 
   goToView("visualizador");
 }
