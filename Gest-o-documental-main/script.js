@@ -1,4 +1,3 @@
-// ---------- Etapa 8, commit 3: painel de administração ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -33,8 +32,9 @@ let empresas = [];   // empresas cadastradas (coleção "empresas" do Firestore)
 let currentViewedDocId = null; // documento aberto no visualizador agora
 let userProfile = null;     // { email, isAdmin, empresas: [] } — permissões de quem está logado
 let dataInitialized = false;
-let unsubProfile = null, unsubEmpresas = null, unsubDocumentos = null, unsubUsuarios = null; // pra "desligar" os escutadores
-let usuariosList = []; // todos os usuários que já entraram no site (só o admin enxerga)
+let unsubProfile = null, unsubEmpresas = null, unsubDocumentos = null, unsubUsuarios = null, unsubLogs = null; // pra "desligar" os escutadores
+let usuariosList = [];
+let logsList = [];     // histórico de ações (só o admin enxerga) // todos os usuários que já entraram no site (só o admin enxerga)
 let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
 // ---------- Funções utilitárias ----------
@@ -73,7 +73,7 @@ function goToView(target) {
   document.querySelectorAll(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === target));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.getElementById("view-" + target).classList.add("active");
-  if (target === "admin") renderAdminUsersTable();
+  if (target === "admin") { renderAdminUsersTable(); renderAdminLogTable(); }
 }
 document.querySelectorAll(".nav-item").forEach(item => {
   item.addEventListener("click", (e) => { e.preventDefault(); goToView(item.dataset.view); });
@@ -151,6 +151,7 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano }, onProgr
     uploadedAtMs: agora.getTime(),
     uploadedAt: serverTimestamp(),
   });
+  registrarLog("upload_documento", { nomeArquivo: file.name, empresa });
 }
 
 // ---------- Página de Upload ----------
@@ -280,8 +281,8 @@ let pendingDelete = null; // guarda o que está prestes a ser excluído
 const deleteOverlay = document.getElementById("delete-modal-overlay");
 
 // type: "documento" ou "comprovante" — a mesma janela de senha serve pros dois
-function openDeleteModal({ type = "documento", docId, fileId, nome, comprovanteFileId = null }) {
-  pendingDelete = { type, docId, fileId, nome, comprovanteFileId };
+function openDeleteModal({ type = "documento", docId, fileId, nome, comprovanteFileId = null, empresa = null }) {
+  pendingDelete = { type, docId, fileId, nome, comprovanteFileId, empresa };
   document.getElementById("delete-modal-filename").textContent = nome;
   document.getElementById("delete-password").value = "";
   document.getElementById("delete-modal-error").textContent = "";
@@ -318,6 +319,7 @@ document.getElementById("delete-confirm-form").addEventListener("submit", async 
       // só o comprovante: some o arquivo do Drive e o campo do documento
       await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
       await updateDoc(doc(db, "documentos", alvo.docId), { comprovante: null });
+      registrarLog("excluir_comprovante", { nomeArquivo: alvo.nome, empresa: alvo.empresa });
     } else {
       if (alvo.fileId) {
         await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
@@ -329,6 +331,7 @@ document.getElementById("delete-confirm-form").addEventListener("submit", async 
         } catch (_) { /* se falhar, não trava a exclusão do documento */ }
       }
       await deleteDoc(doc(db, "documentos", alvo.docId));
+      registrarLog("excluir_documento", { nomeArquivo: alvo.nome, empresa: alvo.empresa });
     }
 
     // Se estava vendo o documento que acabou de ser excluído, volta pra lista
@@ -375,7 +378,7 @@ function openViewer(docId) {
   // Excluir direto da página do documento (também pede a senha)
   document.getElementById("viewer-delete-btn").onclick = () => openDeleteModal({
     type: "documento", docId: d.id, fileId: d.fileId, nome: d.nomeArquivo,
-    comprovanteFileId: d.comprovante?.fileId || null
+    comprovanteFileId: d.comprovante?.fileId || null, empresa: d.empresa
   });
 
   // Botão que leva pra página do comprovante
@@ -420,7 +423,7 @@ function renderComprovantePage(d) {
       window.open(`https://drive.google.com/uc?export=download&id=${c.fileId}`, "_blank");
     };
     document.getElementById("comprovante-delete-btn").onclick = () =>
-      openDeleteModal({ type: "comprovante", docId: d.id, fileId: c.fileId, nome: c.nomeArquivo });
+      openDeleteModal({ type: "comprovante", docId: d.id, fileId: c.fileId, nome: c.nomeArquivo, empresa: d.empresa });
   } else {
     document.getElementById("comprovante-iframe").src = "";
   }
@@ -481,6 +484,7 @@ document.getElementById("comprovante-file-input").addEventListener("change", asy
         uploadedAtLabel: new Date().toLocaleDateString("pt-BR")
       }
     });
+    registrarLog("upload_comprovante", { nomeArquivo: file.name, empresa: d.empresa });
   } catch (err) {
     alert("Erro ao enviar comprovante: " + err.message);
   } finally {
@@ -549,8 +553,13 @@ document.getElementById("add-empresa-btn").addEventListener("click", async () =>
 // Só o admin precisa ler a lista de usuários — então o escutador só liga
 // pra quem é admin (e desliga se a pessoa deixar de ser).
 function atualizarEscutasAdmin() {
-  if (isAdminUser() && !unsubUsuarios) listenUsuarios();
-  if (!isAdminUser() && unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; usuariosList = []; }
+  if (isAdminUser()) {
+    if (!unsubUsuarios) listenUsuarios();
+    if (!unsubLogs) listenLogs();
+  } else {
+    if (unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; usuariosList = []; }
+    if (unsubLogs) { unsubLogs(); unsubLogs = null; logsList = []; }
+  }
 }
 
 // Todo mundo que já logou alguma vez no site aparece aqui (cada um tem um perfil)
@@ -621,6 +630,58 @@ function renderAdminUsersTable() {
   });
 }
 
+// ---------- Administração: log de atividade (histórico de ações) ----------
+
+// Grava uma linha no histórico. Fica "no fundo": se falhar, não atrapalha
+// a ação principal (enviar ou excluir o documento).
+function registrarLog(acao, { nomeArquivo, empresa }) {
+  const agora = new Date();
+  addDoc(collection(db, "logs"), {
+    acao,
+    nomeArquivo: nomeArquivo || "",
+    empresa: empresa || "",
+    usuarioEmail: currentUser.email,
+    timestampLabel: agora.toLocaleString("pt-BR"),
+    timestampMs: agora.getTime(),
+    timestamp: serverTimestamp()
+  }).catch(() => {});
+}
+
+// Só o admin lê o histórico (as regras do Firestore recusam os outros)
+function listenLogs() {
+  unsubLogs = onSnapshot(collection(db, "logs"), (snap) => {
+    logsList = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.timestampMs || 0) - (a.timestampMs || 0))
+      .slice(0, 80); // só os 80 mais recentes
+    if (document.getElementById("view-admin").classList.contains("active")) renderAdminLogTable();
+  }, (err) => console.error("Sem permissão para ler o log:", err));
+}
+
+// Desenha a tabela do histórico
+function renderAdminLogTable() {
+  if (!isAdminUser()) return;
+  const body = document.getElementById("admin-log-body");
+  if (logsList.length === 0) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="5">Nenhuma atividade registrada ainda.</td></tr>';
+    return;
+  }
+  const rotulo = {
+    upload_documento: "📤 Enviou documento",
+    excluir_documento: "🗑️ Excluiu documento",
+    upload_comprovante: "📎 Anexou comprovante",
+    excluir_comprovante: "🗑️ Excluiu comprovante"
+  };
+  body.innerHTML = logsList.map(l => `
+    <tr>
+      <td>${rotulo[l.acao] || escapeHtml(l.acao)}</td>
+      <td>${escapeHtml(l.nomeArquivo)}</td>
+      <td>${escapeHtml(l.empresa)}</td>
+      <td>${escapeHtml(l.usuarioEmail)}</td>
+      <td>${escapeHtml(l.timestampLabel || "")}</td>
+    </tr>`).join("");
+}
+
 // ---------- Desenho das tabelas ----------
 
 // Monta o HTML de UMA linha de tabela. Serve para as duas tabelas
@@ -661,7 +722,7 @@ function bindRowActions(container) {
       const d = documentos.find(x => x.id === btn.dataset.id);
       openDeleteModal({
         type: "documento", docId: btn.dataset.id, fileId: btn.dataset.fileid, nome: btn.dataset.nome,
-        comprovanteFileId: d?.comprovante?.fileId || null
+        comprovanteFileId: d?.comprovante?.fileId || null, empresa: d?.empresa || null
       });
     });
   });
@@ -827,9 +888,10 @@ async function initUserProfileThenData(user) {
 
 // Ao sair: desliga os escutadores e limpa tudo que era do usuário anterior
 function limparSessao() {
-  [unsubProfile, unsubEmpresas, unsubDocumentos, unsubUsuarios].forEach(fn => { if (fn) fn(); });
-  unsubProfile = unsubEmpresas = unsubDocumentos = unsubUsuarios = null;
+  [unsubProfile, unsubEmpresas, unsubDocumentos, unsubUsuarios, unsubLogs].forEach(fn => { if (fn) fn(); });
+  unsubProfile = unsubEmpresas = unsubDocumentos = unsubUsuarios = unsubLogs = null;
   usuariosList = [];
+  logsList = [];
   userProfile = null;
   dataInitialized = false;
   documentos = [];
