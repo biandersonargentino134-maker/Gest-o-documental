@@ -1,11 +1,11 @@
-// ---------- Etapa 8, commit 1: cadastro de empresas ----------
+// ---------- Etapa 8, commit 2: permissões de acesso por empresa ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
   EmailAuthProvider, reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, doc, deleteDoc, updateDoc, onSnapshot, query, serverTimestamp
+  getFirestore, collection, addDoc, doc, deleteDoc, updateDoc, onSnapshot, query, where, serverTimestamp, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -31,6 +31,9 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Ag
 let documentos = [];
 let empresas = [];   // empresas cadastradas (coleção "empresas" do Firestore)
 let currentViewedDocId = null; // documento aberto no visualizador agora
+let userProfile = null;     // { email, isAdmin, empresas: [] } — permissões de quem está logado
+let dataInitialized = false;
+let unsubProfile = null, unsubEmpresas = null, unsubDocumentos = null; // pra "desligar" os escutadores
 let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
 // ---------- Funções utilitárias ----------
@@ -492,7 +495,8 @@ document.getElementById("comprovante-file-input").addEventListener("change", asy
 
 // Escuta as empresas cadastradas em tempo real
 function listenEmpresas() {
-  onSnapshot(query(collection(db, "empresas")), (snap) => {
+  if (unsubEmpresas) unsubEmpresas();
+  unsubEmpresas = onSnapshot(query(collection(db, "empresas")), (snap) => {
     empresas = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -505,7 +509,7 @@ function listenEmpresas() {
 function refreshEmpresaSelect() {
   const select = document.getElementById("up-empresa");
   const valorAtual = select.value;
-  const lista = empresas;
+  const lista = getVisibleEmpresas();
   select.innerHTML = "";
   if (lista.length === 0) {
     const opt = document.createElement("option");
@@ -612,12 +616,14 @@ function renderTabelas() {
 // documentos e o espaço que ela ocupa.
 function renderEmpresas() {
   const grid = document.getElementById("empresas-grid");
-  const lista = empresas;
+  const lista = getVisibleEmpresas();
 
   document.getElementById("stat-total-empresas").textContent = lista.length;
 
   if (lista.length === 0) {
-    const vazio = 'Nenhuma empresa cadastrada ainda. Clique em "+ Nova empresa".';
+    const vazio = isAdminUser()
+      ? 'Nenhuma empresa cadastrada ainda. Clique em "+ Nova empresa".'
+      : "Nenhuma empresa liberada pro seu usuário ainda. Fale com o administrador.";
     grid.innerHTML = `<div class="empty-row" style="grid-column:1/-1;padding:34px;">${vazio}</div>`;
     return;
   }
@@ -644,23 +650,109 @@ function renderEstatisticas() {
 
 // Escuta os documentos em tempo real e redesenha tudo quando algo muda
 function listenDocumentos() {
-  onSnapshot(query(collection(db, "documentos")), (snap) => {
+  if (unsubDocumentos) { unsubDocumentos(); unsubDocumentos = null; }
+
+  const admin = isAdminUser();
+  const permitidas = (userProfile && userProfile.empresas) || [];
+
+  // Sem nenhuma empresa liberada: o cofre fica vazio e nem consultamos o banco
+  if (!admin && permitidas.length === 0) {
+    documentos = [];
+    renderAllDocumentViews();
+    return;
+  }
+
+  // Administrador lê tudo; usuário comum só lê as empresas liberadas pra ele.
+  // (O Firestore também exige isso nas regras — veja o arquivo firestore.rules.)
+  const q = admin
+    ? query(collection(db, "documentos"))
+    : query(collection(db, "documentos"), where("empresa", "in", permitidas.slice(0, 10)));
+
+  unsubDocumentos = onSnapshot(q, (snap) => {
     documentos = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .sort((a, b) => (b.uploadedAtMs || 0) - (a.uploadedAtMs || 0)); // mais novos primeiro
-    renderEstatisticas();
-    renderTabelas();
-    renderEmpresas();
+    renderAllDocumentViews();
+  }, (err) => console.error("Erro ao ler os documentos:", err));
+}
 
-    // Se tem um documento aberto, mantém o botão e a página de comprovante atualizados
-    const atual = documentos.find(x => x.id === currentViewedDocId);
-    if (atual) {
-      setComprovanteButtonLabel(atual);
-      if (document.getElementById("view-comprovante").classList.contains("active")) {
-        renderComprovantePage(atual);
-      }
+// Redesenha tudo que depende da lista de documentos
+function renderAllDocumentViews() {
+  renderEstatisticas();
+  renderTabelas();
+  renderEmpresas();
+
+  // Se tem um documento aberto, mantém o botão e a página de comprovante atualizados
+  const atual = documentos.find(x => x.id === currentViewedDocId);
+  if (atual) {
+    setComprovanteButtonLabel(atual);
+    if (document.getElementById("view-comprovante").classList.contains("active")) {
+      renderComprovantePage(atual);
     }
+  }
+}
+
+// ---------- Permissões do usuário ----------
+// Cada usuário tem um "perfil" na coleção "usuarios" do Firestore, guardando
+// se ele é administrador e quais empresas pode acessar. Todo usuário novo
+// nasce BLOQUEADO (isAdmin: false e nenhuma empresa) até um admin liberar.
+
+function isAdminUser() {
+  return !!(userProfile && userProfile.isAdmin);
+}
+
+// Empresas que o usuário atual pode ver: administrador vê todas
+function getVisibleEmpresas() {
+  if (isAdminUser()) return empresas;
+  const permitidas = (userProfile && userProfile.empresas) || [];
+  return empresas.filter(e => permitidas.includes(e.nome));
+}
+
+// Ajusta a tela conforme as permissões
+function applyProfileToUI() {
+  document.getElementById("add-empresa-btn").hidden = !isAdminUser();
+  const semAcesso = !isAdminUser() && ((userProfile && userProfile.empresas) || []).length === 0;
+  document.getElementById("sem-acesso-aviso").hidden = !semAcesso;
+}
+
+// Depois do login: garante que o perfil existe (cria bloqueado no primeiro
+// login) e fica escutando em tempo real — se um admin mudar as permissões
+// enquanto a pessoa usa o site, a tela se atualiza sozinha.
+async function initUserProfileThenData(user) {
+  const ref = doc(db, "usuarios", user.uid);
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, { email: user.email, isAdmin: false, empresas: [] });
+    }
+  } catch (err) {
+    console.error("Erro ao ler/criar o perfil:", err);
+  }
+
+  if (unsubProfile) unsubProfile();
+  unsubProfile = onSnapshot(ref, (docSnap) => {
+    userProfile = docSnap.exists() ? docSnap.data() : { email: user.email, isAdmin: false, empresas: [] };
+    applyProfileToUI();
+    if (!dataInitialized) {
+      dataInitialized = true;
+      listenEmpresas();
+    }
+    listenDocumentos(); // reassina com as permissões atuais
+    renderEmpresas();
+    refreshEmpresaSelect();
   });
+}
+
+// Ao sair: desliga os escutadores e limpa tudo que era do usuário anterior
+function limparSessao() {
+  [unsubProfile, unsubEmpresas, unsubDocumentos].forEach(fn => { if (fn) fn(); });
+  unsubProfile = unsubEmpresas = unsubDocumentos = null;
+  userProfile = null;
+  dataInitialized = false;
+  documentos = [];
+  empresas = [];
+  renderAllDocumentViews();
+  goToView("inicio");
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -677,10 +769,10 @@ onAuthStateChanged(auth, (user) => {
 
     populateMonthSelect("up-mes");
     iniciarPaginaUpload();
-    listenEmpresas();
-    listenDocumentos();
+    initUserProfileThenData(user);
   } else {
     document.getElementById("login-screen").hidden = false;
     document.getElementById("main-app").hidden = true;
+    limparSessao();
   }
 });
