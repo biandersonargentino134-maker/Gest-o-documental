@@ -324,8 +324,12 @@ table.doc-table{width:100%;border-collapse:collapse;}
 }
 .admin-check-pill input{margin:0;accent-color:var(--accent);}
 .admin-check-pill.checked{background:var(--accent-light);border-color:var(--accent);color:var(--accent-dark);}
-.admin-toggle{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;cursor:pointer;}
-.admin-toggle input{accent-color:var(--accent);width:16px;height:16px;}
+.role-toggle-btn{
+  background:var(--surface);border:1px solid var(--border);color:var(--text-muted);
+  font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;white-space:nowrap;
+}
+.role-toggle-btn:hover{border-color:var(--accent);color:var(--accent-dark);}
+.role-toggle-btn.is-admin{background:#fdecea;border-color:#f3c6bd;color:#a53225;}
+.role-toggle-btn.is-admin:hover{border-color:#a53225;}
 .pill-admin{background:#fdecea;color:#a53225;}
-.pill-comum{background:var(--accent-light);color:var(--accent-dark);}
 .btn-sm-admin{padding:6px 12px;font-size:12px;}

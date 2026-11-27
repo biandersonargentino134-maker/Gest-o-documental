@@ -1,3 +1,4 @@
+// ---------- Etapa 8, commit 5: admin não remove o próprio acesso ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -572,7 +573,10 @@ function listenUsuarios() {
   }, (err) => console.error("Sem permissão para listar usuários:", err));
 }
 
-// Desenha a tabela de usuários e permissões
+// Desenha a tabela de usuários e permissões.
+// Na SUA PRÓPRIA linha não há controle nenhum: o administrador não consegue
+// tirar o próprio acesso (nem sem querer). Nas outras linhas, um botão claro
+// "Tornar administrador" / "Administrador" liga e desliga o papel.
 function renderAdminUsersTable() {
   if (!isAdminUser()) return;
   const body = document.getElementById("admin-users-body");
@@ -581,41 +585,59 @@ function renderAdminUsersTable() {
     return;
   }
   body.innerHTML = usuariosList.map(u => {
-    const checks = empresas.map(emp => {
-      const marcado = (u.empresas || []).includes(emp.nome);
-      return `<label class="admin-check-pill ${marcado ? "checked" : ""}">
-        <input type="checkbox" data-empresa="${escapeHtml(emp.nome)}" ${marcado ? "checked" : ""}>
-        ${escapeHtml(emp.nome)}
-      </label>`;
-    }).join("");
+    const ehVoce = u.uid === currentUser.uid;
+
+    const celulaAdmin = ehVoce
+      ? `<span class="pill pill-admin">🛡️ Administrador</span>
+         <div class="doc-name-sub">Seu próprio acesso — não pode ser alterado por aqui</div>`
+      : `<button type="button" class="role-toggle-btn ${u.isAdmin ? "is-admin" : ""}" data-admin-toggle data-current="${u.isAdmin ? "true" : "false"}">
+           ${u.isAdmin ? "🛡️ Administrador" : "+ Tornar administrador"}
+         </button>`;
+
+    // Administrador vê todas as empresas sozinho, então na própria linha não precisa marcar nada
+    const celulaEmpresas = ehVoce
+      ? `<div class="doc-name-sub">Administrador vê todas as empresas automaticamente</div>`
+      : `<div class="admin-empresas-checks">${
+          empresas.map(emp => {
+            const marcado = (u.empresas || []).includes(emp.nome);
+            return `<label class="admin-check-pill ${marcado ? "checked" : ""}">
+              <input type="checkbox" data-empresa="${escapeHtml(emp.nome)}" ${marcado ? "checked" : ""}>
+              ${escapeHtml(emp.nome)}
+            </label>`;
+          }).join("") || '<span class="doc-name-sub">Nenhuma empresa cadastrada</span>'
+        }</div>`;
+
     return `
       <tr>
         <td>
           <div class="doc-name-main">${escapeHtml(u.email)}</div>
-          <div class="doc-name-sub">${u.uid === currentUser.uid ? "(você)" : ""}</div>
+          <div class="doc-name-sub">${ehVoce ? "(você)" : ""}</div>
         </td>
-        <td>
-          <label class="admin-toggle">
-            <input type="checkbox" data-admin-toggle ${u.isAdmin ? "checked" : ""}>
-            <span class="pill ${u.isAdmin ? "pill-admin" : "pill-comum"}">${u.isAdmin ? "Administrador" : "Usuário comum"}</span>
-          </label>
-        </td>
-        <td><div class="admin-empresas-checks">${checks || '<span class="doc-name-sub">Nenhuma empresa cadastrada</span>'}</div></td>
-        <td><button class="btn-ghost btn-sm-admin" data-save-uid="${u.uid}">Salvar</button></td>
+        <td>${celulaAdmin}</td>
+        <td>${celulaEmpresas}</td>
+        <td>${ehVoce ? "" : `<button class="btn-ghost btn-sm-admin" data-save-uid="${u.uid}">Salvar</button>`}</td>
       </tr>`;
   }).join("");
 
-  // Marca/desmarca o visual da pílula ao clicar na caixinha
   body.querySelectorAll("input[data-empresa]").forEach(cb => {
     cb.addEventListener("change", () => cb.closest(".admin-check-pill").classList.toggle("checked", cb.checked));
   });
 
-  // Salva as permissões da linha
+  // Botão de papel: só troca o visual; vale de verdade quando clicar em Salvar
+  body.querySelectorAll("[data-admin-toggle]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const novo = btn.dataset.current !== "true";
+      btn.dataset.current = novo ? "true" : "false";
+      btn.classList.toggle("is-admin", novo);
+      btn.textContent = novo ? "🛡️ Administrador" : "+ Tornar administrador";
+    });
+  });
+
   body.querySelectorAll("[data-save-uid]").forEach(btn => {
     btn.addEventListener("click", async () => {
       const row = btn.closest("tr");
       const marcadas = [...row.querySelectorAll("input[data-empresa]:checked")].map(cb => cb.dataset.empresa);
-      const adminMarcado = row.querySelector("[data-admin-toggle]").checked;
+      const adminMarcado = row.querySelector("[data-admin-toggle]").dataset.current === "true";
       btn.disabled = true;
       btn.textContent = "Salvando...";
       try {

@@ -1,6 +1,6 @@
 // Codigo para o rules do banco de dados do firebase
 
- rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -15,13 +15,17 @@ service cloud.firestore {
     }
 
     // Perfil de cada usuário. Cada um só cria o PRÓPRIO perfil, e sempre
-    // bloqueado (sem admin e sem empresas). Só admin altera permissões.
+    // bloqueado (sem admin e sem empresas). Só admin altera permissões — mas
+    // NINGUÉM (nem o admin) consegue tirar o próprio "isAdmin" nem apagar o
+    // próprio perfil, pra ninguém se trancar fora do sistema.
     match /usuarios/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow create: if request.auth != null && request.auth.uid == uid
                      && request.resource.data.isAdmin == false
                      && request.resource.data.empresas.size() == 0;
-      allow update, delete: if request.auth != null && isAdmin();
+      allow update: if request.auth != null && isAdmin()
+                     && !(request.auth.uid == uid && request.resource.data.isAdmin == false);
+      allow delete: if request.auth != null && isAdmin() && request.auth.uid != uid;
     }
 
     // Cadastro de empresas: todo mundo logado lê, só admin cadastra.
@@ -46,3 +50,4 @@ service cloud.firestore {
     }
   }
 }
+
