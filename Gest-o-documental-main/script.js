@@ -1,4 +1,4 @@
-// ---------- Etapa 7, commit 2: página própria para o comprovante ----------
+// ---------- Etapa 8, commit 1: cadastro de empresas ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -17,7 +17,6 @@ const firebaseConfig = {
   appId: "1:810363195574:web:691598d28e0abee306d617"
 };
 
-// Cole aqui a URL do seu Apps Script (a que termina em /exec)
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzFYVYbzMp1sPTwt26BzPuhA9q9IgJ0EcevyboUsHgUcMQlxU4GlnFAf9BSupSij6bY/exec";
 
 const app = initializeApp(firebaseConfig);
@@ -30,6 +29,7 @@ const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Ag
 
 // "Memória" da página: cópia dos documentos que vêm do Firestore
 let documentos = [];
+let empresas = [];   // empresas cadastradas (coleção "empresas" do Firestore)
 let currentViewedDocId = null; // documento aberto no visualizador agora
 let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
@@ -485,6 +485,58 @@ document.getElementById("comprovante-file-input").addEventListener("change", asy
   }
 });
 
+// ---------- Cadastro de empresas ----------
+// Antes, o nome da empresa era digitado a mão em cada upload e a página
+// Empresas só mostrava as que já tinham documento. Agora existe um cadastro
+// de verdade, numa coleção "empresas" do Firestore.
+
+// Escuta as empresas cadastradas em tempo real
+function listenEmpresas() {
+  onSnapshot(query(collection(db, "empresas")), (snap) => {
+    empresas = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    refreshEmpresaSelect();
+    renderEmpresas();
+  });
+}
+
+// Preenche o select de empresa da página de Upload
+function refreshEmpresaSelect() {
+  const select = document.getElementById("up-empresa");
+  const valorAtual = select.value;
+  const lista = empresas;
+  select.innerHTML = "";
+  if (lista.length === 0) {
+    const opt = document.createElement("option");
+    opt.value = ""; opt.textContent = "Nenhuma empresa cadastrada"; opt.disabled = true; opt.selected = true;
+    select.appendChild(opt);
+    return;
+  }
+  lista.forEach(e => {
+    const opt = document.createElement("option");
+    opt.value = e.nome; opt.textContent = e.nome;
+    select.appendChild(opt);
+  });
+  if (lista.some(e => e.nome === valorAtual)) select.value = valorAtual;
+}
+
+// Botão "+ Nova empresa"
+document.getElementById("add-empresa-btn").addEventListener("click", async () => {
+  const nome = window.prompt("Nome da nova empresa:");
+  if (!nome || !nome.trim()) return;
+  const nomeLimpo = nome.trim();
+  if (empresas.some(e => e.nome.toLowerCase() === nomeLimpo.toLowerCase())) {
+    alert("Essa empresa já está cadastrada.");
+    return;
+  }
+  try {
+    await addDoc(collection(db, "empresas"), { nome: nomeLimpo });
+  } catch (err) {
+    alert("Erro ao cadastrar empresa: " + err.message);
+  }
+});
+
 // ---------- Desenho das tabelas ----------
 
 // Monta o HTML de UMA linha de tabela. Serve para as duas tabelas
@@ -556,30 +608,29 @@ function renderTabelas() {
   bindRowActions(docBody);
 }
 
-// Página Empresas: ainda não existe um cadastro de empresas, então a lista
-// é montada a partir dos documentos (cada empresa que já tem documento).
+// Página Empresas: um cartão por empresa cadastrada, com a quantidade de
+// documentos e o espaço que ela ocupa.
 function renderEmpresas() {
   const grid = document.getElementById("empresas-grid");
-  const porEmpresa = {};
-  documentos.forEach(d => {
-    if (!porEmpresa[d.empresa]) porEmpresa[d.empresa] = { qtd: 0, bytes: 0 };
-    porEmpresa[d.empresa].qtd += 1;
-    porEmpresa[d.empresa].bytes += tamanhoTotal(d);
-  });
-  const nomes = Object.keys(porEmpresa).sort();
+  const lista = empresas;
 
-  document.getElementById("stat-total-empresas").textContent = nomes.length;
+  document.getElementById("stat-total-empresas").textContent = lista.length;
 
-  if (nomes.length === 0) {
-    grid.innerHTML = '<div class="empty-row" style="grid-column:1/-1;padding:34px;">Nenhuma empresa ainda — elas aparecem aqui depois do primeiro documento enviado.</div>';
+  if (lista.length === 0) {
+    const vazio = 'Nenhuma empresa cadastrada ainda. Clique em "+ Nova empresa".';
+    grid.innerHTML = `<div class="empty-row" style="grid-column:1/-1;padding:34px;">${vazio}</div>`;
     return;
   }
-  grid.innerHTML = nomes.map(nome => `
-    <div class="empresa-card">
-      <div class="stat-icon">🏢</div>
-      <div class="empresa-name">${escapeHtml(nome)}</div>
-      <div class="empresa-meta"><b>${porEmpresa[nome].qtd}</b> documento(s) · <b>${formatBytes(porEmpresa[nome].bytes)}</b></div>
-    </div>`).join("");
+  grid.innerHTML = lista.map(emp => {
+    const docs = documentos.filter(d => d.empresa === emp.nome);
+    const bytes = docs.reduce((soma, d) => soma + tamanhoTotal(d), 0);
+    return `
+      <div class="empresa-card">
+        <div class="stat-icon">🏢</div>
+        <div class="empresa-name">${escapeHtml(emp.nome)}</div>
+        <div class="empresa-meta"><b>${docs.length}</b> documento(s) · <b>${formatBytes(bytes)}</b></div>
+      </div>`;
+  }).join("");
 }
 
 // Cartões de estatística do Início
@@ -626,6 +677,7 @@ onAuthStateChanged(auth, (user) => {
 
     populateMonthSelect("up-mes");
     iniciarPaginaUpload();
+    listenEmpresas();
     listenDocumentos();
   } else {
     document.getElementById("login-screen").hidden = false;

@@ -120,8 +120,9 @@
       <div class="page-header">
         <div>
           <h1>Empresas</h1>
-          <p>Empresas que já têm documentos guardados.</p>
+          <p>Empresas cadastradas no sistema.</p>
         </div>
+        <button class="btn-primary" id="add-empresa-btn">+ Nova empresa</button>
       </div>
       <div class="empresas-grid" id="empresas-grid"></div>
     </section>
@@ -151,7 +152,7 @@
           <h3>Detalhes do documento</h3>
           <div class="field">
             <label for="up-empresa">Empresa</label>
-            <input type="text" id="up-empresa" required>
+            <select id="up-empresa" required></select>
           </div>
           <div class="field-row">
             <div class="field">
