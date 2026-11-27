@@ -1,4 +1,4 @@
-// ---------- Etapa 8, commit 5: admin não remove o próprio acesso ----------
+// ---------- Etapa 8, commit 6: backend só aceita quem está logado ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -113,6 +113,31 @@ function populateMonthSelect(selectId) {
   });
 }
 
+// ---------- Chamadas ao backend (Apps Script) ----------
+// Antes, qualquer pessoa que descobrisse a URL do Apps Script podia enviar
+// ou apagar arquivos. Agora toda chamada leva junto o "token" de login do
+// Firebase, e o Apps Script confere com o Google se ele é de alguém logado.
+async function chamarBackend(corpo) {
+  const idToken = await currentUser.getIdToken();
+  const response = await fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({ ...corpo, idToken })
+  });
+  const result = await response.json();
+  if (result.error) throw new Error(result.error);
+  return result;
+}
+
+// Apaga um arquivo do Drive. Se o arquivo já não existir lá, segue em frente
+// (pra ainda dar pra excluir o registro); mas um erro de login NÃO é ignorado.
+async function apagarNoDrive(fileId) {
+  try {
+    await chamarBackend({ action: "delete", fileId });
+  } catch (err) {
+    if (err.message.startsWith("Não autorizado")) throw err;
+  }
+}
+
 // ---------- Envio de documento (lógica compartilhada) ----------
 // Toda a parte "pesada" do envio fica aqui, separada da tela.
 async function enviarDocumento({ file, empresa, tipoImposto, mes, ano }, onProgress = () => {}) {
@@ -127,18 +152,13 @@ async function enviarDocumento({ file, empresa, tipoImposto, mes, ano }, onProgr
   onProgress(40);
   const fileData = await fileToBase64(file);
   onProgress(70);
-  const response = await fetch(GAS_URL, {
-    method: "POST",
-    body: JSON.stringify({
+  const result = await chamarBackend({
       action: "upload",
       empresa,
       fileName: file.name,
       mimeType: file.type || "application/octet-stream",
       fileData
-    })
-  });
-  const result = await response.json();
-  if (result.error) throw new Error(result.error);
+    });
   onProgress(100);
 
   const agora = new Date();
@@ -318,18 +338,18 @@ document.getElementById("delete-confirm-form").addEventListener("submit", async 
     // 2) Senha certa: apaga
     if (ehComprovante) {
       // só o comprovante: some o arquivo do Drive e o campo do documento
-      await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
+      await apagarNoDrive(alvo.fileId);
       await updateDoc(doc(db, "documentos", alvo.docId), { comprovante: null });
       registrarLog("excluir_comprovante", { nomeArquivo: alvo.nome, empresa: alvo.empresa });
     } else {
       if (alvo.fileId) {
-        await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.fileId }) });
+        await apagarNoDrive(alvo.fileId);
       }
       // Se o documento tinha comprovante, apaga ele do Drive também (senão sobraria arquivo órfão)
       if (alvo.comprovanteFileId) {
         try {
-          await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "delete", fileId: alvo.comprovanteFileId }) });
-        } catch (_) { /* se falhar, não trava a exclusão do documento */ }
+          await apagarNoDrive(alvo.comprovanteFileId);
+        } catch (err) { if (err.message.startsWith("Não autorizado")) throw err; }
       }
       await deleteDoc(doc(db, "documentos", alvo.docId));
       registrarLog("excluir_documento", { nomeArquivo: alvo.nome, empresa: alvo.empresa });
@@ -463,18 +483,13 @@ document.getElementById("comprovante-file-input").addEventListener("change", asy
   btn.textContent = "Enviando...";
   try {
     const fileData = await fileToBase64(file);
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      body: JSON.stringify({
+    const result = await chamarBackend({
         action: "upload",
         empresa: d.empresa,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
         fileData
-      })
-    });
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
+      });
 
     await updateDoc(doc(db, "documentos", d.id), {
       comprovante: {
