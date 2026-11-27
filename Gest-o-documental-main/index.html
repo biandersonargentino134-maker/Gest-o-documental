@@ -47,6 +47,7 @@
       <a href="#" class="nav-item" data-view="empresas"><span class="icon">🏢</span> Empresas</a>
       <a href="#" class="nav-item" data-view="upload"><span class="icon">⬆</span> Upload</a>
       <a href="#" class="nav-item" data-view="documentos"><span class="icon">🗂️</span> Documentos</a>
+      <a href="#" class="nav-item" data-view="admin" id="nav-admin-item" hidden><span class="icon">⚙</span> Administração</a>
     </nav>
     <div class="sidebar-spacer"></div>
     <div class="user-email" id="user-email"></div>
@@ -256,6 +257,25 @@
           <input type="file" id="comprovante-file-input" hidden>
           <button class="btn-primary" id="comprovante-add-btn">+ Adicionar comprovante</button>
         </div>
+      </div>
+    </section>
+
+    <!-- ---- ADMINISTRAÇÃO (só pra administrador) ---- -->
+    <section class="view" id="view-admin">
+      <div class="page-header">
+        <div>
+          <h1>Administração</h1>
+          <p>Gerencie as permissões dos usuários.</p>
+        </div>
+      </div>
+
+      <h3 class="section-title">Usuários e permissões</h3>
+      <p class="admin-help">Todo usuário novo entra bloqueado, sem acesso a nenhuma empresa. Marque abaixo quais empresas cada um pode ver e clique em Salvar.</p>
+      <div class="table-card">
+        <table class="doc-table">
+          <thead><tr><th>Usuário</th><th>Administrador</th><th>Empresas liberadas</th><th>Ação</th></tr></thead>
+          <tbody id="admin-users-body"></tbody>
+        </table>
       </div>
     </section>
 

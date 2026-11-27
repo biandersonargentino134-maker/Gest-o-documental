@@ -1,4 +1,4 @@
-// ---------- Etapa 8, commit 2: permissões de acesso por empresa ----------
+// ---------- Etapa 8, commit 3: painel de administração ----------
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut,
@@ -33,7 +33,8 @@ let empresas = [];   // empresas cadastradas (coleção "empresas" do Firestore)
 let currentViewedDocId = null; // documento aberto no visualizador agora
 let userProfile = null;     // { email, isAdmin, empresas: [] } — permissões de quem está logado
 let dataInitialized = false;
-let unsubProfile = null, unsubEmpresas = null, unsubDocumentos = null; // pra "desligar" os escutadores
+let unsubProfile = null, unsubEmpresas = null, unsubDocumentos = null, unsubUsuarios = null; // pra "desligar" os escutadores
+let usuariosList = []; // todos os usuários que já entraram no site (só o admin enxerga)
 let currentUser = null; // usuário logado (precisamos do e-mail dele pra conferir a senha)
 
 // ---------- Funções utilitárias ----------
@@ -72,6 +73,7 @@ function goToView(target) {
   document.querySelectorAll(".nav-item").forEach(i => i.classList.toggle("active", i.dataset.view === target));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   document.getElementById("view-" + target).classList.add("active");
+  if (target === "admin") renderAdminUsersTable();
 }
 document.querySelectorAll(".nav-item").forEach(item => {
   item.addEventListener("click", (e) => { e.preventDefault(); goToView(item.dataset.view); });
@@ -502,6 +504,7 @@ function listenEmpresas() {
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     refreshEmpresaSelect();
     renderEmpresas();
+    if (document.getElementById("view-admin").classList.contains("active")) renderAdminUsersTable();
   });
 }
 
@@ -540,6 +543,83 @@ document.getElementById("add-empresa-btn").addEventListener("click", async () =>
     alert("Erro ao cadastrar empresa: " + err.message);
   }
 });
+
+// ---------- Administração: usuários e permissões (só pra administrador) ----------
+
+// Só o admin precisa ler a lista de usuários — então o escutador só liga
+// pra quem é admin (e desliga se a pessoa deixar de ser).
+function atualizarEscutasAdmin() {
+  if (isAdminUser() && !unsubUsuarios) listenUsuarios();
+  if (!isAdminUser() && unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; usuariosList = []; }
+}
+
+// Todo mundo que já logou alguma vez no site aparece aqui (cada um tem um perfil)
+function listenUsuarios() {
+  unsubUsuarios = onSnapshot(collection(db, "usuarios"), (snap) => {
+    usuariosList = snap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .sort((a, b) => (a.email || "").localeCompare(b.email || ""));
+    if (document.getElementById("view-admin").classList.contains("active")) renderAdminUsersTable();
+  }, (err) => console.error("Sem permissão para listar usuários:", err));
+}
+
+// Desenha a tabela de usuários e permissões
+function renderAdminUsersTable() {
+  if (!isAdminUser()) return;
+  const body = document.getElementById("admin-users-body");
+  if (usuariosList.length === 0) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="4">Nenhum usuário entrou no site ainda.</td></tr>';
+    return;
+  }
+  body.innerHTML = usuariosList.map(u => {
+    const checks = empresas.map(emp => {
+      const marcado = (u.empresas || []).includes(emp.nome);
+      return `<label class="admin-check-pill ${marcado ? "checked" : ""}">
+        <input type="checkbox" data-empresa="${escapeHtml(emp.nome)}" ${marcado ? "checked" : ""}>
+        ${escapeHtml(emp.nome)}
+      </label>`;
+    }).join("");
+    return `
+      <tr>
+        <td>
+          <div class="doc-name-main">${escapeHtml(u.email)}</div>
+          <div class="doc-name-sub">${u.uid === currentUser.uid ? "(você)" : ""}</div>
+        </td>
+        <td>
+          <label class="admin-toggle">
+            <input type="checkbox" data-admin-toggle ${u.isAdmin ? "checked" : ""}>
+            <span class="pill ${u.isAdmin ? "pill-admin" : "pill-comum"}">${u.isAdmin ? "Administrador" : "Usuário comum"}</span>
+          </label>
+        </td>
+        <td><div class="admin-empresas-checks">${checks || '<span class="doc-name-sub">Nenhuma empresa cadastrada</span>'}</div></td>
+        <td><button class="btn-ghost btn-sm-admin" data-save-uid="${u.uid}">Salvar</button></td>
+      </tr>`;
+  }).join("");
+
+  // Marca/desmarca o visual da pílula ao clicar na caixinha
+  body.querySelectorAll("input[data-empresa]").forEach(cb => {
+    cb.addEventListener("change", () => cb.closest(".admin-check-pill").classList.toggle("checked", cb.checked));
+  });
+
+  // Salva as permissões da linha
+  body.querySelectorAll("[data-save-uid]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("tr");
+      const marcadas = [...row.querySelectorAll("input[data-empresa]:checked")].map(cb => cb.dataset.empresa);
+      const adminMarcado = row.querySelector("[data-admin-toggle]").checked;
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      try {
+        await updateDoc(doc(db, "usuarios", btn.dataset.saveUid), { isAdmin: adminMarcado, empresas: marcadas });
+      } catch (err) {
+        alert("Erro ao salvar: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Salvar";
+      }
+    });
+  });
+}
 
 // ---------- Desenho das tabelas ----------
 
@@ -711,6 +791,7 @@ function getVisibleEmpresas() {
 // Ajusta a tela conforme as permissões
 function applyProfileToUI() {
   document.getElementById("add-empresa-btn").hidden = !isAdminUser();
+  document.getElementById("nav-admin-item").hidden = !isAdminUser();
   const semAcesso = !isAdminUser() && ((userProfile && userProfile.empresas) || []).length === 0;
   document.getElementById("sem-acesso-aviso").hidden = !semAcesso;
 }
@@ -733,6 +814,7 @@ async function initUserProfileThenData(user) {
   unsubProfile = onSnapshot(ref, (docSnap) => {
     userProfile = docSnap.exists() ? docSnap.data() : { email: user.email, isAdmin: false, empresas: [] };
     applyProfileToUI();
+    atualizarEscutasAdmin();
     if (!dataInitialized) {
       dataInitialized = true;
       listenEmpresas();
@@ -745,8 +827,9 @@ async function initUserProfileThenData(user) {
 
 // Ao sair: desliga os escutadores e limpa tudo que era do usuário anterior
 function limparSessao() {
-  [unsubProfile, unsubEmpresas, unsubDocumentos].forEach(fn => { if (fn) fn(); });
-  unsubProfile = unsubEmpresas = unsubDocumentos = null;
+  [unsubProfile, unsubEmpresas, unsubDocumentos, unsubUsuarios].forEach(fn => { if (fn) fn(); });
+  unsubProfile = unsubEmpresas = unsubDocumentos = unsubUsuarios = null;
+  usuariosList = [];
   userProfile = null;
   dataInitialized = false;
   documentos = [];
